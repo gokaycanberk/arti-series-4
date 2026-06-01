@@ -1,5 +1,19 @@
 @import "tailwindcss";
 
+@font-face {
+  font-family: "Planc";
+  src:
+    url("/fonts/Planc-Bold.otf") format("opentype"),
+    url("/fonts/planc/Planc-Bold.otf") format("opentype");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+.font-planc {
+  font-family: "Planc", sans-serif;
+}
+
 /* Monokrom, sadece açık tema — özel tasarım belirteçleri. */
 :root {
   --background: #ffffff;
@@ -27,4 +41,8 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-sans);
+}
+
+body[data-intro-active="true"] header {
+  display: none;
 }

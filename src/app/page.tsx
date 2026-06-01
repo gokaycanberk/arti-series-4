@@ -1,79 +1,334 @@
 "use client";
 
+import gsap from "gsap";
+import Image from "next/image";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 
-import { GameCard } from "@/components/GameCard";
-import { GAMES } from "@/lib/games";
-import { useGameStore } from "@/stores/gameStore";
+const PARALLAX_LAYERS = [
+  {
+    src: "/layers/Layer1.png",
+    depth: 15,
+    className:
+      "left-[-5%] top-[30%] w-[26vw] md:w-[20vw]",
+  },
+  {
+    src: "/layers/Layer2.png",
+    depth: 10,
+    className:
+      "left-[45%] top-[-3%] w-[14vw] md:w-[10vw]",
+  },
+  {
+    src: "/layers/Layer3.png",
+    depth: 20,
+    className:
+      "right-[-3%] top-[5%] w-[28vw] md:w-[22vw]",
+  },
+  {
+    src: "/layers/Layer4.png",
+    depth: 12,
+    className:
+      "left-[10%] bottom-[5%] w-[24vw] md:w-[18vw]",
+  },
+  {
+    src: "/layers/Layer3.png",
+    depth: 18,
+    className:
+      "right-[5%] bottom-[8%] w-[28vw] md:w-[22vw]",
+  },
+] as const;
 
-/** Ana güzergâh — mod seçimi ve oyun ızgarası. */
 export default function HomePage() {
   const router = useRouter();
-  const setMode = useGameStore((s) => s.setMode);
+  const introRef = useRef<HTMLDivElement>(null);
+  const welcomeRef = useRef<HTMLHeadingElement>(null);
+  const totheRef = useRef<HTMLHeadingElement>(null);
+  const logoRef = useRef<HTMLImageElement>(null);
+  const rotatingLineRef = useRef<HTMLDivElement>(null);
 
-  const scrollToGames = () => {
-    document.getElementById("games-grid")?.scrollIntoView({ behavior: "smooth" });
-  };
+  const [introComplete, setIntroComplete] = useState(false);
+  const [parallaxEnabled, setParallaxEnabled] = useState(false);
+  const [layerOffsets, setLayerOffsets] = useState(
+    PARALLAX_LAYERS.map(() => ({ x: 0, y: 0 })),
+  );
 
-  const enterFreePlay = () => {
-    setMode("free");
-    scrollToGames();
-  };
+  useEffect(() => {
+    const media = window.matchMedia("(min-width: 768px) and (hover: hover)");
+    const update = () => setParallaxEnabled(media.matches);
+    update();
+    media.addEventListener("change", update);
+    return () => media.removeEventListener("change", update);
+  }, []);
+
+  useEffect(() => {
+    if (introComplete) {
+      document.body.style.overflow = "";
+      delete document.body.dataset.introActive;
+      return;
+    }
+    document.body.style.overflow = "hidden";
+    document.body.dataset.introActive = "true";
+    return () => {
+      document.body.style.overflow = "";
+      delete document.body.dataset.introActive;
+    };
+  }, [introComplete]);
+
+  useLayoutEffect(() => {
+    if (introComplete) return;
+
+    const intro = introRef.current;
+    const welcome = welcomeRef.current;
+    const tothe = totheRef.current;
+    const logo = logoRef.current;
+    const rotatingLine = rotatingLineRef.current;
+    if (!intro || !welcome || !tothe || !logo || !rotatingLine) return;
+
+    document.body.style.overflow = "hidden";
+
+    const centerStack = {
+      left: "50%",
+      top: "50%",
+      xPercent: -50,
+      yPercent: -50,
+      y: 0,
+    };
+
+    gsap.set(welcome, centerStack);
+    gsap.set(tothe, centerStack);
+    gsap.set(logo, {
+      ...centerStack,
+      rotation: -25,
+      scale: 1.4,
+      transformOrigin: "center center",
+      force3D: true,
+    });
+    gsap.set(rotatingLine, {
+      rotation: 0,
+      transformOrigin: "center center",
+    });
+
+    const tl = gsap.timeline({ delay: 1.2 });
+
+    tl.to(welcome, {
+      y: -120,
+      duration: 2,
+      ease: "power3.inOut",
+    })
+      .to(
+        tothe,
+        {
+          y: 100,
+          duration: 2,
+          ease: "power3.inOut",
+        },
+        "<",
+      )
+      .to(
+        logo,
+        {
+          y: 220,
+          rotation: 0,
+          scale: 1,
+          duration: 2,
+          ease: "power3.inOut",
+        },
+        "<",
+      )
+      .to(
+        rotatingLine,
+        {
+          rotation: 90,
+          duration: 2,
+          ease: "power3.inOut",
+        },
+        "<",
+      )
+      .to({}, { duration: 1.5 })
+      .to(intro, {
+        y: "100vh",
+        duration: 0.9,
+        ease: "power2.inOut",
+        onComplete: () => {
+          document.body.style.overflow = "";
+          setIntroComplete(true);
+        },
+      });
+
+    return () => {
+      tl.kill();
+      document.body.style.overflow = "";
+    };
+  }, [introComplete]);
+
+  const handleMouseMove = useCallback(
+    (event: MouseEvent) => {
+      if (!parallaxEnabled) return;
+
+      const centerX = window.innerWidth / 2;
+      const centerY = window.innerHeight / 2;
+      const deltaX = (event.clientX - centerX) / centerX;
+      const deltaY = (event.clientY - centerY) / centerY;
+
+      setLayerOffsets(
+        PARALLAX_LAYERS.map((layer) => ({
+          x: deltaX * layer.depth,
+          y: deltaY * layer.depth,
+        })),
+      );
+    },
+    [parallaxEnabled],
+  );
+
+  useEffect(() => {
+    if (!parallaxEnabled || introComplete === false) return;
+
+    window.addEventListener("mousemove", handleMouseMove);
+    return () => window.removeEventListener("mousemove", handleMouseMove);
+  }, [handleMouseMove, introComplete, parallaxEnabled]);
 
   return (
-    <div className="mx-auto w-full max-w-6xl flex-1 px-4 py-14">
-      <div className="space-y-4 text-center">
-        <p className="text-xs uppercase tracking-[0.45em] text-foreground/45">
-          Artı Labs — Series 04
-        </p>
-        <h1 className="text-balance text-5xl font-semibold tracking-tight sm:text-6xl">
-          Artı Series 4
-        </h1>
-        <p className="mx-auto max-w-2xl text-lg leading-relaxed text-foreground/60">
-          On mini oyun, tek tasarım dili — tipografi ve renk hissini küçük süreçlere böldük.
-          Serbest modda seç, ya da bir solukta tamamını bitir.
-        </p>
+    <div className="relative left-1/2 w-screen max-w-none -translate-x-1/2">
+      {!introComplete && (
+        <div
+          ref={introRef}
+          id="intro-section"
+          className="fixed inset-0 z-50 overflow-hidden bg-black will-change-transform"
+          aria-hidden={introComplete}
+        >
+          <div className="absolute inset-0 flex items-center justify-center">
+            <h1
+              ref={welcomeRef}
+              id="welcome-text"
+              className="font-planc absolute left-1/2 top-1/2 select-none whitespace-nowrap text-center font-bold text-[#FFFFFF] will-change-transform"
+              style={{
+                fontSize: "clamp(80px, 18vw, 270px)",
+                lineHeight: 0.93,
+                letterSpacing: "0em",
+              }}
+            >
+              WELCOME
+            </h1>
 
-        <div className="mx-auto mt-12 flex flex-col gap-4 sm:flex-row sm:justify-center">
-          <button
-            type="button"
-            onClick={enterFreePlay}
-            className="rounded-full bg-foreground px-10 py-3 text-center text-sm font-semibold text-background transition hover:opacity-90"
-          >
-            Serbest Oyna
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              router.push("/marathon");
-            }}
-            className="rounded-full border border-subtle px-10 py-3 text-center text-sm font-semibold transition hover:bg-subtle/60"
-          >
-            Maratona Katıl
-          </button>
-        </div>
-      </div>
+            <h2
+              ref={totheRef}
+              id="tothe-text"
+              className="font-planc absolute left-1/2 top-1/2 select-none whitespace-nowrap text-center font-bold text-[#FFFFFF] will-change-transform"
+              style={{
+                fontSize: "clamp(80px, 18vw, 270px)",
+                lineHeight: 0.93,
+                letterSpacing: "0em",
+              }}
+            >
+              TO THE
+            </h2>
 
-      <section
-        id="games-grid"
-        className="mx-auto mt-20 scroll-mt-28 space-y-6"
-      >
-        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-subtle pb-4">
-          <h2 className="text-xl font-semibold tracking-tight">Mini oyunlar</h2>
-          <p className="text-sm text-foreground/50">
-            Kartlardan birine dokunarak ilgili oyun sahnesine geçebilirsin.
-          </p>
-        </div>
-        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-5">
-          {GAMES.map((game) => (
-            <GameCard
-              key={game.id}
-              game={game}
-              href={`/games/${game.id}`}
-              onNavigate={() => setMode("free")}
+            {/* eslint-disable-next-line @next/next/no-img-element -- GSAP animates this logo directly */}
+            <img
+              ref={logoRef}
+              id="intro-logo"
+              src="/mainpagelogo.png"
+              alt="Logo"
+              className="pointer-events-none absolute left-1/2 top-1/2 z-10 select-none will-change-transform"
+              style={{
+                width: "clamp(150px, 25vw, 380px)",
+                transform: "translate(-50%, -50%) rotate(-25deg) scale(1.4)",
+              }}
             />
-          ))}
+          </div>
+
+          <div
+            className="absolute bottom-[50px] left-1/2"
+            style={{ transform: "translateX(-50%)" }}
+          >
+            <div
+              className="relative flex items-center justify-center"
+              style={{ width: "40px", height: "40px" }}
+            >
+              <div
+                id="vertical-line"
+                className="absolute bg-white"
+                style={{ width: "1px", height: "40px" }}
+              />
+              <div
+                ref={rotatingLineRef}
+                id="rotating-line"
+                className="absolute bg-white"
+                style={{ width: "1px", height: "40px", transform: "rotate(0deg)" }}
+              />
+            </div>
+          </div>
         </div>
+      )}
+
+      <section className="relative z-[1] min-h-screen w-full bg-[#E8E8E8] px-6 py-24 md:px-10">
+        <button
+          type="button"
+          className="fixed left-6 top-6 z-40 flex flex-col gap-1.5 p-2"
+          aria-label="Menü"
+        >
+          <span className="block h-[3px] w-7 bg-[#1A1A1A]" />
+          <span className="block h-[3px] w-7 bg-[#1A1A1A]" />
+        </button>
+
+        {PARALLAX_LAYERS.map((layer, index) => (
+          <div
+            key={`${layer.src}-${index}`}
+            className={`pointer-events-none absolute ${layer.className}`}
+            style={{
+              transform: `translate3d(${layerOffsets[index]?.x ?? 0}px, ${layerOffsets[index]?.y ?? 0}px, 0)`,
+              transition: parallaxEnabled
+                ? "transform 0.3s ease-out"
+                : undefined,
+            }}
+          >
+            <Image
+              src={layer.src}
+              alt=""
+              width={480}
+              height={480}
+              className="h-auto w-full select-none"
+              draggable={false}
+              priority={introComplete}
+            />
+          </div>
+        ))}
+
+        <div className="relative z-10 mx-auto flex min-h-[calc(100vh-12rem)] max-w-[500px] flex-col items-center justify-center gap-10 pt-16 text-center">
+          <p className="text-sm leading-relaxed text-[#1A1A1A] md:text-base md:leading-[1.6]">
+            Gorem ipsum dolor sit amet, consectetur adipiscing elit. Etiam eu
+            turpis molestie, dictum est a, mattis tellus. Sed dignissim, metus
+            nec fringilla accumsan, risus sem sollicitudin lacus, ut interdum t
+            Aliquam in elementum tellus. Etiam eu turpis
+          </p>
+
+          <button
+            type="button"
+            onClick={() => router.push("/marathon")}
+            className="border-2 border-[#1A1A1A] bg-transparent px-12 py-4 text-sm font-medium uppercase tracking-[0.2em] text-[#1A1A1A] transition-colors duration-300 hover:bg-[#1A1A1A] hover:text-white"
+          >
+            CHALLENGE ACCEPTED!
+          </button>
+        </div>
+
+        <p className="fixed bottom-6 right-6 z-40 text-xs text-[#666]">
+          created by{" "}
+          <Link
+            href="https://studyo.co"
+            className="font-semibold text-[#1A1A1A] hover:underline"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            +Stüdyo
+          </Link>
+        </p>
       </section>
     </div>
   );

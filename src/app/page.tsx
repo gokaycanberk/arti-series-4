@@ -12,36 +12,33 @@ import {
   useState,
 } from "react";
 
+import PressButton from "@/components/PressButton";
+
 const PARALLAX_LAYERS = [
   {
     src: "/layers/Layer1.png",
     depth: 15,
-    className:
-      "left-[-5%] top-[30%] w-[26vw] md:w-[20vw]",
+    className: "left-[-5%] top-[30%] w-[26vw] md:w-[20vw]",
   },
   {
     src: "/layers/Layer2.png",
     depth: 10,
-    className:
-      "left-[45%] top-[-3%] w-[14vw] md:w-[10vw]",
+    className: "left-[45%] top-[-3%] w-[14vw] md:w-[10vw]",
   },
   {
     src: "/layers/Layer3.png",
     depth: 20,
-    className:
-      "right-[-3%] top-[5%] w-[28vw] md:w-[22vw]",
+    className: "right-[-3%] top-[5%] w-[28vw] md:w-[22vw]",
   },
   {
     src: "/layers/Layer4.png",
     depth: 12,
-    className:
-      "left-[10%] bottom-[5%] w-[24vw] md:w-[18vw]",
+    className: "left-[10%] bottom-[5%] w-[24vw] md:w-[18vw]",
   },
   {
     src: "/layers/Layer3.png",
     depth: 18,
-    className:
-      "right-[5%] bottom-[8%] w-[28vw] md:w-[22vw]",
+    className: "right-[5%] bottom-[8%] w-[28vw] md:w-[22vw]",
   },
 ] as const;
 
@@ -261,7 +258,11 @@ export default function HomePage() {
                 ref={rotatingLineRef}
                 id="rotating-line"
                 className="absolute bg-white"
-                style={{ width: "1px", height: "40px", transform: "rotate(0deg)" }}
+                style={{
+                  width: "1px",
+                  height: "40px",
+                  transform: "rotate(0deg)",
+                }}
               />
             </div>
           </div>
@@ -309,13 +310,12 @@ export default function HomePage() {
             Aliquam in elementum tellus. Etiam eu turpis
           </p>
 
-          <button
-            type="button"
-            onClick={() => router.push("/marathon")}
-            className="border-2 border-[#1A1A1A] bg-transparent px-12 py-4 text-sm font-medium uppercase tracking-[0.2em] text-[#1A1A1A] transition-colors duration-300 hover:bg-[#1A1A1A] hover:text-white"
-          >
-            CHALLENGE ACCEPTED!
-          </button>
+          <PressButton
+            label="CHALLENGE ACCEPTED!"
+            onClick={() => router.push("/onboarding")}
+            width={260}
+            height={44}
+          />
         </div>
 
         <p className="fixed bottom-6 right-6 z-40 text-xs text-[#666]">

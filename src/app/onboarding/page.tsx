@@ -53,6 +53,9 @@ const AVATAR_SOURCES = [
   "/Avatar_Set/nose/9.png",
 ];
 
+// Double the sources — her avatar iki kere kullanılsın
+const AVATAR_SOURCES_DOUBLED = [...AVATAR_SOURCES, ...AVATAR_SOURCES];
+
 const WHEEL_SIZE = 280;
 const WHEEL_RADIUS = WHEEL_SIZE / 2;
 
@@ -105,27 +108,25 @@ function generateFloatingItems(): FloatingItem[] {
   const maxRadius = Math.sqrt(cx * cx + cy * cy) * 0.95;
   const goldenAngle = 137.508 * (Math.PI / 180);
 
-  // First pass: use every source image at least once
-  const sources = [...AVATAR_SOURCES];
+  // Doubled sources kullan — desktop 86, mobile 44
+  const totalCount = isMobile ? 44 : 86;
+  const sources = [...AVATAR_SOURCES_DOUBLED];
 
-  // Second pass: add duplicates to increase density
-  const totalCount = isMobile ? 25 : 60;
+  // Eksik varsa ekle
   while (sources.length < totalCount) {
     sources.push(
       AVATAR_SOURCES[Math.floor(Math.random() * AVATAR_SOURCES.length)]!,
     );
   }
 
-  // Shuffle to randomize order
+  // Shuffle
   for (let i = sources.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
     [sources[i], sources[j]] = [sources[j]!, sources[i]!];
   }
 
-  const count = isMobile ? 25 : 60;
-
-  for (let i = 0; i < count; i++) {
-    const t = i / (count - 1);
+  for (let i = 0; i < totalCount; i++) {
+    const t = i / (totalCount - 1);
     const r = minRadius + (maxRadius - minRadius) * Math.sqrt(t);
     const theta = i * goldenAngle;
 
@@ -196,7 +197,9 @@ export default function OnboardingPage() {
     y: number;
   } | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [isAnimating, setIsAnimating] = useState(false);
 
+  // --- MOUNT ---
   useEffect(() => {
     const header = document.querySelector("header");
     if (header instanceof HTMLElement) {
@@ -226,6 +229,7 @@ export default function OnboardingPage() {
     };
   }, []);
 
+  // --- CANVAS ---
   useEffect(() => {
     if (!mounted) return;
 
@@ -239,6 +243,7 @@ export default function OnboardingPage() {
     drawColorWheel(canvas);
   }, [mounted]);
 
+  // --- GSAP: floating items giriş animasyonu ---
   useEffect(() => {
     if (!mounted || floatingItems.length === 0) return;
 
@@ -290,12 +295,15 @@ export default function OnboardingPage() {
     };
   }, [mounted, floatingItems]);
 
+  // --- COLOR WHEEL: etkileşim ---
   const handleWheelInteraction = useCallback(
     (
       event:
         | React.MouseEvent<HTMLCanvasElement>
         | React.TouchEvent<HTMLCanvasElement>,
     ) => {
+      if (isAnimating) return;
+
       const canvas = event.currentTarget;
       const rect = canvas.getBoundingClientRect();
       const clientX =
@@ -320,21 +328,207 @@ export default function OnboardingPage() {
         y: clientY - rect.top,
       });
     },
-    [],
+    [isAnimating],
   );
 
+  // --- HANDLE START: Girdap + Flash + Face Reveal ---
   const handleStart = useCallback(() => {
+    if (isAnimating) return;
+    setIsAnimating(true);
+
     if (selectedColor) {
       useGameStore.getState().setNickname(selectedColor.hex);
     }
-    router.push("/games");
-  }, [router, selectedColor]);
+
+    gsap.killTweensOf('[id^="float-"]');
+
+    const tl = gsap.timeline({
+      onComplete: () => {
+        router.push("/games");
+      },
+    });
+
+    // === FAZ 1: UI elemanları küçülüp kaybolur ===
+    tl.to(
+      "#pick-name-box, #hs-badge, #color-wheel-container, #bottom-row",
+      {
+        scale: 0,
+        opacity: 0,
+        duration: 0.6,
+        ease: "power2.in",
+        stagger: 0.05,
+      },
+      0,
+    );
+
+    // === FAZ 2: Çemberler küçülür ===
+    tl.to(
+      ".concentric-circle",
+      {
+        scale: 0,
+        opacity: 0,
+        duration: 0.7,
+        ease: "power2.in",
+        stagger: 0.1,
+      },
+      0.2,
+    );
+
+    // === FAZ 3: Avatar parçaları ===
+    const allAvatars = document.querySelectorAll('[id^="float-"]');
+    const avatarArray = Array.from(allAvatars);
+    const shuffled = [...avatarArray].sort(() => Math.random() - 0.5);
+    const chosen = shuffled.slice(0, 6);
+    const rejected = shuffled.slice(6);
+
+    // Reddedilenler — ekran dışına
+    rejected.forEach((el) => {
+      const angle = Math.random() * Math.PI * 2;
+      const distance = 1500;
+      tl.to(
+        el,
+        {
+          x: `+=${Math.cos(angle) * distance}`,
+          y: `+=${Math.sin(angle) * distance}`,
+          opacity: 0,
+          rotation: `+=${(Math.random() - 0.5) * 720}`,
+          duration: 0.8 + Math.random() * 0.4,
+          ease: "power3.in",
+        },
+        0.4 + Math.random() * 0.3,
+      );
+    });
+
+    // Seçilenler — merkeze girdap
+    const cx = window.innerWidth / 2;
+    const cy = window.innerHeight / 2;
+
+    // === FAZ 3: Seçilenler — merkeze girdap (daha yavaş) ===
+    chosen.forEach((el, i) => {
+      const rect = el.getBoundingClientRect();
+      const elCx = rect.left + rect.width / 2;
+      const elCy = rect.top + rect.height / 2;
+      const dx = cx - elCx;
+      const dy = cy - elCy;
+      const delay = 0.5 + i * 0.15; // 0.1 → 0.15
+
+      // Spiral çekilme — 1.0s → 1.6s
+      tl.to(
+        el,
+        {
+          x: `+=${dx}`,
+          y: `+=${dy}`,
+          rotation: `+=${720 + Math.random() * 360}`,
+          scale: 0.6,
+          duration: 1.6,
+          ease: "power2.in",
+        },
+        delay,
+      );
+
+      // Son küçülme — 0.3s → 0.5s
+      tl.to(
+        el,
+        {
+          scale: 0,
+          opacity: 0,
+          rotation: `+=360`,
+          duration: 0.5,
+          ease: "power4.in",
+        },
+        delay + 1.4,
+      );
+    });
+
+    // === FAZ 4: Beyaz flash (daha geç, daha yavaş) ===
+    tl.to(
+      "#flash-overlay",
+      {
+        opacity: 1,
+        duration: 0.25, // 0.15 → 0.25
+        ease: "power2.in",
+      },
+      2.4, // 1.6 → 2.4
+    );
+    tl.to(
+      "#flash-overlay",
+      {
+        opacity: 0,
+        duration: 0.6, // 0.4 → 0.6
+        ease: "power2.out",
+      },
+      2.65, // 1.75 → 2.65
+    );
+
+    // === FAZ 5: Face reveal (daha geç, daha yavaş) ===
+    tl.to(
+      "#face-reveal",
+      {
+        scale: 1,
+        opacity: 1,
+        duration: 0.8, // 0.5 → 0.8
+        ease: "back.out(1.7)",
+      },
+      2.5, // 1.7 → 2.5
+    );
+
+    // Face pulse — daha belirgin
+    tl.to(
+      "#face-reveal",
+      {
+        scale: 1.12, // 1.08 → 1.12
+        duration: 0.35, // 0.2 → 0.35
+        ease: "power1.inOut",
+        yoyo: true,
+        repeat: 2, // 1 → 2 (iki kere pulse)
+      },
+      3.3, // 2.2 → 3.3
+    );
+
+    // Face kaybolur — daha yavaş
+    tl.to(
+      "#face-reveal",
+      {
+        scale: 0.8,
+        opacity: 0,
+        duration: 0.6, // 0.4 → 0.6
+        ease: "power2.in",
+      },
+      4.0, // 2.6 → 4.0
+    );
+  }, [router, selectedColor, isAnimating]);
 
   return (
     <div className="fixed inset-0 h-screen w-screen overflow-hidden bg-[#E8E8E8]">
+      {/* Flash Overlay */}
+      <div
+        id="flash-overlay"
+        className="fixed inset-0 z-[9999] pointer-events-none"
+        style={{ backgroundColor: "white", opacity: 0 }}
+      />
+
+      {/* Face Reveal */}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        id="face-reveal"
+        src="/Avatar_Set/face/face.png"
+        alt="face"
+        className="fixed z-[100] pointer-events-none"
+        style={{
+          width: "160px",
+          height: "160px",
+          top: "50%",
+          left: "50%",
+          transform: "translate(-50%, -50%) scale(0)",
+          opacity: 0,
+          borderRadius: "50%",
+        }}
+      />
+
+      {/* Concentric Circles */}
       <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
         <div
-          className="absolute rounded-full"
+          className="absolute rounded-full concentric-circle"
           style={{
             width: "960px",
             height: "960px",
@@ -342,7 +536,7 @@ export default function OnboardingPage() {
           }}
         />
         <div
-          className="absolute rounded-full"
+          className="absolute rounded-full concentric-circle"
           style={{
             width: "1568px",
             height: "1568px",
@@ -350,7 +544,7 @@ export default function OnboardingPage() {
           }}
         />
         <div
-          className="absolute rounded-full"
+          className="absolute rounded-full concentric-circle"
           style={{
             width: "1968px",
             height: "1968px",
@@ -359,9 +553,10 @@ export default function OnboardingPage() {
         />
       </div>
 
+      {/* Floating Avatar Items */}
       {mounted &&
         floatingItems.map((item, i) => (
-          // eslint-disable-next-line @next/next/no-img-element -- dynamic avatar paths
+          // eslint-disable-next-line @next/next/no-img-element
           <img
             key={i}
             id={`float-${i}`}
@@ -380,10 +575,11 @@ export default function OnboardingPage() {
           />
         ))}
 
-      {/* Center content — vertically stacked with specific spacing */}
+      {/* Center Content */}
       <div className="absolute inset-0 z-10 flex flex-col items-center justify-center">
-        {/* Pick your name box — 40px ABOVE the wheel frame circle */}
+        {/* Pick your name box */}
         <div
+          id="pick-name-box"
           className="flex items-center justify-center border border-[#1A1A1A] font-planc text-[20px] text-[#1A1A1A]"
           style={{
             width: "360px",
@@ -398,13 +594,17 @@ export default function OnboardingPage() {
 
         {/* H:S badge */}
         {selectedColor && (
-          <div className="mb-2 rounded-sm bg-[#1A1A1A] px-2 py-0.5 font-mono text-[10px] text-white">
+          <div
+            id="hs-badge"
+            className="mb-2 rounded-sm bg-[#1A1A1A] px-2 py-0.5 font-mono text-[10px] text-white"
+          >
             {selectedColor.h}:{selectedColor.s}
           </div>
         )}
 
-        {/* Wheel frame circle (black border) containing the color wheel */}
+        {/* Wheel frame + Canvas */}
         <div
+          id="color-wheel-container"
           className="relative flex items-center justify-center rounded-full"
           style={{
             width: `${280 + 66 * 2}px`,
@@ -412,7 +612,6 @@ export default function OnboardingPage() {
             border: "1.5px solid #1A1A1A",
           }}
         >
-          {/* Color Wheel Canvas — centered inside frame */}
           <div className="relative">
             <canvas
               id="color-wheel"
@@ -445,12 +644,12 @@ export default function OnboardingPage() {
           </div>
         </div>
 
-        {/* Bottom row: AKA Box + LET'S GO — 40px BELOW the wheel frame circle */}
+        {/* Bottom row: AKA + LET'S GO */}
         <div
+          id="bottom-row"
           className="flex items-stretch gap-3"
           style={{ marginTop: "20px", height: "89px" }}
         >
-          {/* AKA + Color Box */}
           <div
             className="flex flex-col border border-[#1A1A1A]"
             style={{ width: "196px", height: "89px" }}
@@ -476,7 +675,6 @@ export default function OnboardingPage() {
             </div>
           </div>
 
-          {/* LET'S GO Button */}
           <PressButton
             label="LET'S GO!"
             onClick={handleStart}

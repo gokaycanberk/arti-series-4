@@ -12,6 +12,7 @@ import {
   useState,
 } from "react";
 
+import MinimalNav from "@/components/MinimalNav";
 import PressButton from "@/components/PressButton";
 
 const PARALLAX_LAYERS = [
@@ -191,6 +192,19 @@ export default function HomePage() {
     return () => window.removeEventListener("mousemove", handleMouseMove);
   }, [handleMouseMove, introComplete, parallaxEnabled]);
 
+  // Header'ı gizle
+  useEffect(() => {
+    const header = document.querySelector("header");
+    if (header instanceof HTMLElement) {
+      header.style.display = "none";
+    }
+    return () => {
+      if (header instanceof HTMLElement) {
+        header.style.display = "";
+      }
+    };
+  }, []);
+
   return (
     <div className="relative left-1/2 w-screen max-w-none -translate-x-1/2">
       {!introComplete && (
@@ -270,14 +284,7 @@ export default function HomePage() {
       )}
 
       <section className="relative z-[1] min-h-screen w-full bg-[#E8E8E8] px-6 py-24 md:px-10">
-        <button
-          type="button"
-          className="fixed left-6 top-6 z-40 flex flex-col gap-1.5 p-2"
-          aria-label="Menü"
-        >
-          <span className="block h-[3px] w-7 bg-[#1A1A1A]" />
-          <span className="block h-[3px] w-7 bg-[#1A1A1A]" />
-        </button>
+        <MinimalNav />
 
         {PARALLAX_LAYERS.map((layer, index) => (
           <div

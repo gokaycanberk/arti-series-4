@@ -5,7 +5,6 @@ import { useLayoutEffect } from "react";
 
 import { useGameStore } from "@/stores/gameStore";
 
-import { Header } from "./Header";
 import { NicknameModal } from "./NicknameModal";
 
 /**
@@ -24,7 +23,6 @@ export function ClientRoot({ children }: PropsWithChildren) {
     <>
       <NicknameModal />
       <div className="flex min-h-screen flex-col bg-background">
-        <Header />
         <main className="flex flex-1 flex-col">{children}</main>
       </div>
     </>

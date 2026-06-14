@@ -20,7 +20,6 @@ type FileStatus = "open" | "saved" | "discarded";
 type TabLayout = {
   leftPct: number;
   topPct: number;
-  /** Çakışmayı önlemek için sabit slot indeksi */
   slotIndex: number;
   z: number;
 };
@@ -36,7 +35,6 @@ type ActiveModal = { fileId: number; fileName: string };
 
 const TAB_SUFFIX = "@ 23,72 % (RGB/Preview)";
 
-/** Yatay düz; üst üste binmeyen ~20 slot (yüzde, çalışma alanına göre). */
 const TAB_SLOTS: readonly { leftPct: number; topPct: number }[] = (() => {
   const slots: { leftPct: number; topPct: number }[] = [];
   for (let row = 0; row < 4; row++) {
@@ -54,9 +52,9 @@ function randomLayout(peers: ProjectFile[]): TabLayout {
   const used = new Set(peers.map((p) => p.layout.slotIndex));
   const free = TAB_SLOTS.map((_, i) => i).filter((i) => !used.has(i));
   const pick =
-    free.length > 0 ?
-      free[randomIntInclusive(0, free.length - 1)]!
-    : randomIntInclusive(0, TAB_SLOTS.length - 1);
+    free.length > 0
+      ? free[randomIntInclusive(0, free.length - 1)]!
+      : randomIntInclusive(0, TAB_SLOTS.length - 1);
   const s = TAB_SLOTS[pick]!;
   return {
     leftPct: s.leftPct,
@@ -88,7 +86,10 @@ function UntitledGameplay({
   timeLeft,
   endGame,
   setLiveScoreGetter,
-}: GameShellChildState) {
+}: Pick<
+  GameShellChildState,
+  "isPlaying" | "timeLeft" | "endGame" | "setLiveScoreGetter"
+>) {
   const [files, setFiles] = useState<ProjectFile[]>(() => makeInitialFiles());
   const [activeModal, setActiveModal] = useState<ActiveModal | null>(null);
   const [savedCount, setSavedCount] = useState(0);
@@ -102,7 +103,6 @@ function UntitledGameplay({
   const nextIdRef = useRef(TOTAL_FILES + 1);
 
   const remaining = files.length;
-
   const panicMode = isPlaying && timeLeft <= 3;
 
   useEffect(() => {
@@ -120,7 +120,7 @@ function UntitledGameplay({
     setActiveModal(null);
     setExitingIds(new Set());
     setFiles([]);
-    endGame(100);
+    endGame();
   }, [endGame]);
 
   const removeFileAfterFade = useCallback(
@@ -129,7 +129,9 @@ function UntitledGameplay({
       window.setTimeout(() => {
         if (endedRef.current) return;
 
-        const nextSaved = wasSaved ? savedCountRef.current + 1 : savedCountRef.current;
+        const nextSaved = wasSaved
+          ? savedCountRef.current + 1
+          : savedCountRef.current;
         if (wasSaved && nextSaved >= TOTAL_FILES) {
           savedCountRef.current = TOTAL_FILES;
           setSavedCount(TOTAL_FILES);
@@ -223,7 +225,9 @@ function UntitledGameplay({
   return (
     <div
       className={`font-sans relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-black/10 transition-shadow duration-300 ${
-        panicMode ? "shadow-[0_0_0_3px_rgba(239,68,68,0.85),inset_0_0_40px_rgba(239,68,68,0.12)]" : ""
+        panicMode
+          ? "shadow-[0_0_0_3px_rgba(239,68,68,0.85),inset_0_0_40px_rgba(239,68,68,0.12)]"
+          : ""
       }`}
       style={{
         backgroundColor: "#D4D4D4",
@@ -258,7 +262,6 @@ function UntitledGameplay({
         </span>
       </div>
 
-      {/* Sekmeler + düz “ekran altı” şerit (kareli desen yok) */}
       <div
         className="relative min-h-0 min-h-[min(20rem,calc(100vh-340px))] flex-1 overflow-hidden"
         style={{
@@ -310,7 +313,8 @@ function UntitledGameplay({
         <div
           className="pointer-events-none absolute inset-x-0 bottom-0 h-[min(20%,5rem)] border-t border-black/12"
           style={{
-            background: "linear-gradient(180deg, #cecece 0%, #b4b4b4 55%, #a8a8a8 100%)",
+            background:
+              "linear-gradient(180deg, #cecece 0%, #b4b4b4 55%, #a8a8a8 100%)",
           }}
           aria-hidden
         />
@@ -401,7 +405,14 @@ export default function UntitledProjectPage() {
       description={game.description}
       duration={game.duration}
     >
-      {(state) => <UntitledGameplay {...state} />}
+      {({ isPlaying, timeLeft, endGame, setLiveScoreGetter }) => (
+        <UntitledGameplay
+          isPlaying={isPlaying}
+          timeLeft={timeLeft}
+          endGame={endGame}
+          setLiveScoreGetter={setLiveScoreGetter}
+        />
+      )}
     </GameShell>
   );
 }

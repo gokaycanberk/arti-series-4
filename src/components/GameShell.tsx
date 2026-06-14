@@ -1,264 +1,332 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { useCallback, useMemo, useRef, useState } from "react";
-
-import { useTimer } from "@/hooks/useTimer";
-import { TOTAL_GAMES } from "@/lib/games";
-import { clampScore, generatePlaceholderScore } from "@/lib/scoring";
-import { selectMarathonAverage, useGameStore } from "@/stores/gameStore";
-import type { PlayMode } from "@/types";
-
-import { MarathonTransition } from "./MarathonTransition";
-import { ScoreDisplay } from "./ScoreDisplay";
-import { Timer } from "./Timer";
+import gsap from "gsap";
+import { useEffect, useState, useCallback } from "react";
+import { useGameStore } from "@/stores/gameStore";
 
 export type GameShellChildState = {
-  isPlaying: boolean;
+  score: number;
+  round: number;
+  totalRounds: number;
   timeLeft: number;
-  endGame: (score: number) => void;
-  /**
-   * Süre doğal bittiğinde kullanılacak güncel skoru döndüren fonksiyonu kaydeder.
-   * Verilmezse timer sonunda placeholder skor kullanılır.
-   */
-  setLiveScoreGetter?: (getter: () => number) => void;
+  isPlaying: boolean;
+  onAnswer: (correct: boolean) => void;
+  setLiveScoreGetter: (getter: () => number) => void;
+  endGame: () => void;
 };
 
-type Phase = "intro" | "playing" | "finished";
-
 interface GameShellProps {
-  /** Benzersiz sıfırlama için üst bileşenden `gameId`/adım kombinasyonu geçilir. */
   resetKey?: string;
-  gameName: string;
+  gameName?: string;
   description?: string;
   duration?: number;
-  onGameEnd?: (score: number) => void;
-  /** Maraton akışında 1 tabanlı adım — verildiğinde maraton UI ve yönlendirme aktif olur. */
-  marathonStep?: number;
-  children: (state: GameShellChildState) => React.ReactNode;
+  children?: (state: GameShellChildState) => React.ReactElement;
 }
 
-/**
- * Ortak oyun sarayı — intro, zaman çubuğu + timer, çocuk (canvas vb.) ve skor özetini yönetir.
- * `resetKey` değiştikçe shell yeniden oluşturulur (yan etkisiz sıfırlama).
- */
 export function GameShell({
   resetKey,
   gameName,
   description,
   duration = 30,
-  onGameEnd,
-  marathonStep,
   children,
 }: GameShellProps) {
-  const router = useRouter();
-  const mode = useGameStore((s) => s.mode);
-  const nextGame = useGameStore((s) => s.nextGame);
-  const marathonAverage = useGameStore(selectMarathonAverage);
-
-  const shellKey =
-    resetKey ?? `${gameName}-${duration}-${marathonStep ?? "solo"}`;
-
-  return (
-    <GameShellInner
-      key={shellKey}
-      gameName={gameName}
-      description={description}
-      duration={duration}
-      marathonStep={marathonStep}
-      onGameEnd={onGameEnd}
-      mode={mode}
-      nextGame={nextGame}
-      marathonAverage={marathonAverage}
-      router={router}
-    >
-      {children}
-    </GameShellInner>
+  const nickname = useGameStore((state) => state.nickname);
+  const [score, setScore] = useState(0);
+  const [round, setRound] = useState(1);
+  const [timeLeft, setTimeLeft] = useState(duration);
+  const [isPlaying, setIsPlaying] = useState(true);
+  const [liveScoreGetter, setLiveScoreGetter] = useState<(() => number) | null>(
+    null,
   );
-}
+  const totalRounds = 6;
 
-function GameShellInner({
-  gameName,
-  description,
-  duration = 30,
-  onGameEnd,
-  marathonStep,
-  children,
-  mode,
-  nextGame,
-  marathonAverage,
-  router,
-}: Omit<GameShellProps, "resetKey"> & {
-  mode: PlayMode | null;
-  nextGame: () => void;
-  marathonAverage: number;
-  router: ReturnType<typeof useRouter>;
-}) {
-  const [phase, setPhase] = useState<Phase>("intro");
-  const [finalScore, setFinalScore] = useState(0);
-  const endedRef = useRef(false);
-  const liveScoreGetterRef = useRef<(() => number) | null>(null);
+  // Timer
+  useEffect(() => {
+    if (!isPlaying || timeLeft <= 0) return;
+    const interval = setInterval(() => {
+      setTimeLeft((prev) => Math.max(0, prev - 1));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [timeLeft, isPlaying]);
 
-  const isMarathon = mode === "marathon" && marathonStep != null;
+  // Reset when resetKey changes
+  useEffect(() => {
+    queueMicrotask(() => {
+      setScore(0);
+      setRound(1);
+      setTimeLeft(duration);
+      setIsPlaying(true);
+    });
+  }, [resetKey, duration]);
 
-  const setLiveScoreGetter = useCallback((getter: () => number) => {
-    liveScoreGetterRef.current = getter;
+  const onAnswer = useCallback((correct: boolean) => {
+    if (correct) {
+      setScore((prev) => prev + 1);
+    }
+    setRound((prev) => prev + 1);
   }, []);
 
-  const finishGame = useCallback(
-    (rawScore: number) => {
-      if (endedRef.current) return;
-      endedRef.current = true;
-      liveScoreGetterRef.current = null;
+  const endGame = useCallback(() => {
+    setIsPlaying(false);
+  }, []);
 
-      const safe = clampScore(rawScore);
-      setFinalScore(safe);
-      setPhase("finished");
-      onGameEnd?.(safe);
-    },
-    [onGameEnd],
-  );
+  // Entrance animations
+  useEffect(() => {
+    const tl = gsap.timeline({ defaults: { ease: "back.out(1.4)" } });
+    tl.fromTo(
+      "#gs-navbar",
+      { y: -50, opacity: 0 },
+      { y: 0, opacity: 1, duration: 0.6 },
+      0,
+    )
+      .fromTo(
+        "#gs-progress-row",
+        { x: -60, opacity: 0 },
+        { x: 0, opacity: 1, duration: 0.7, ease: "power3.out" },
+        0.2,
+      )
+      .fromTo(
+        "#gs-right-panel",
+        { x: 80, opacity: 0 },
+        { x: 0, opacity: 1, duration: 0.7, ease: "power3.out" },
+        0.35,
+      )
+      .fromTo(
+        "#gs-game-area",
+        { y: 40, opacity: 0 },
+        { y: 0, opacity: 1, duration: 0.7 },
+        0.6,
+      );
+  }, []);
 
-  const handleTimerFinish = useCallback(() => {
-    if (endedRef.current) return;
-    const getter = liveScoreGetterRef.current;
-    if (getter) {
-      try {
-        const raw = getter();
-        if (typeof raw === "number" && !Number.isNaN(raw)) {
-          finishGame(raw);
-          return;
-        }
-      } catch {
-        /* fallthrough to placeholder */
-      }
-    }
-    finishGame(generatePlaceholderScore());
-  }, [finishGame]);
-
-  const { startTimer, stopTimer, resetTimer, timeLeft } = useTimer({
-    onFinish: handleTimerFinish,
-  });
-
-  const handleStart = () => {
-    endedRef.current = false;
-    liveScoreGetterRef.current = null;
-    resetTimer();
-    stopTimer();
-    setPhase("playing");
-    startTimer(duration);
+  const formatTime = (seconds: number) => {
+    const m = Math.floor(seconds / 60)
+      .toString()
+      .padStart(2, "0");
+    const s = (seconds % 60).toString().padStart(2, "0");
+    return `${m}:${s}`;
   };
 
-  const handleReplay = () => {
-    endedRef.current = false;
-    liveScoreGetterRef.current = null;
-    resetTimer();
-    stopTimer();
-    setPhase("intro");
-    setFinalScore(0);
-  };
-
-  const handleMarathonContinue = () => {
-    if (marathonStep == null) return;
-    nextGame();
-
-    const isLastRound = marathonStep >= TOTAL_GAMES;
-    if (isLastRound) {
-      router.push("/leaderboard");
-      return;
-    }
-
-    router.push(`/marathon/${marathonStep + 1}`);
-  };
-
-  const progress =
-    duration > 0 ? Math.max(0, Math.min(1, timeLeft / duration)) : 0;
-
-  const endEarly = useCallback(
-    (score: number) => {
-      stopTimer();
-      finishGame(score);
-    },
-    [finishGame, stopTimer],
-  );
-
-  const childState = useMemo<GameShellChildState>(
-    () => ({
-      isPlaying: phase === "playing",
-      timeLeft,
-      endGame: endEarly,
-      setLiveScoreGetter,
-    }),
-    [endEarly, phase, timeLeft, setLiveScoreGetter],
-  );
+  // Sağ panel genişliği (HEX, skorlar, timer hepsi aynı genişlik)
+  const panelWidth = 180;
 
   return (
-    <div className="mx-auto flex min-h-[calc(100vh-56px)] w-full max-w-4xl flex-col px-4 py-12">
-      {phase === "intro" && (
-        <div className="flex flex-1 flex-col items-center justify-center gap-6 text-center">
-          <p className="text-xs uppercase tracking-[0.35em] text-foreground/50">
-            Artı Series 4
-          </p>
-          <h1 className="max-w-xl text-balance text-4xl font-semibold tracking-tight">
-            {gameName}
-          </h1>
-          {description ? (
-            <p className="max-w-lg text-lg text-foreground/60">{description}</p>
-          ) : null}
+    <div className="absolute inset-0 flex flex-col bg-[#E8E8E8]">
+      {/* NAVBAR */}
+      <div id="gs-navbar" style={{ opacity: 0 }}>
+        <div className="flex items-center justify-between px-6 py-4">
+          {/* Left: Hamburger */}
           <button
-            type="button"
-            onClick={handleStart}
-            className="mt-6 rounded-full bg-foreground px-10 py-3 text-sm font-medium text-background transition hover:opacity-90"
+            className="flex flex-col gap-[5px] cursor-pointer"
+            aria-label="Menu"
           >
-            Başla
-          </button>
-        </div>
-      )}
-
-      {phase === "playing" && (
-        <div className="flex flex-1 flex-col gap-8">
-          <div className="space-y-2">
-            <div className="flex items-center justify-between gap-4">
-              <p className="text-sm font-medium text-foreground/70">{gameName}</p>
-              <Timer seconds={timeLeft} />
-            </div>
-            <div className="h-2 w-full overflow-hidden rounded-full bg-subtle">
-              <div
-                className="h-full rounded-full bg-foreground transition-all duration-1000 ease-linear"
-                style={{ width: `${progress * 100}%` }}
-                aria-valuenow={timeLeft}
-                aria-valuemin={0}
-                aria-valuemax={duration}
-                role="progressbar"
-              />
-            </div>
-          </div>
-
-          <div className="flex flex-1 flex-col">
-            {/* eslint-disable-next-line react-hooks/refs */}
-            {children(childState)}
-          </div>
-        </div>
-      )}
-
-      {phase === "finished" && (
-        <div className="flex flex-1 flex-col items-center justify-center gap-10 py-16">
-          {isMarathon && marathonStep != null ? (
-            <MarathonTransition
-              roundLabel={marathonStep}
-              totalRounds={TOTAL_GAMES}
-              averageSoFar={marathonAverage}
+            <span
+              className="block rounded-sm"
+              style={{
+                backgroundColor: "#1A1A1A",
+                height: "4px",
+                width: "32px",
+              }}
             />
-          ) : null}
-          <ScoreDisplay
-            score={finalScore}
-            isMarathon={Boolean(isMarathon)}
-            onMarathonNext={handleMarathonContinue}
-            onReplay={handleReplay}
-            onHome={() => router.push("/")}
+            <span
+              className="block rounded-sm"
+              style={{
+                backgroundColor: "#1A1A1A",
+                height: "4px",
+                width: "32px",
+              }}
+            />
+          </button>
+
+          {/* Center: Logo placeholder */}
+          <div className="absolute left-1/2 -translate-x-1/2">
+            <span
+              className="text-[14px] text-[#fff] px-5 py-2 rounded"
+              style={{
+                backgroundColor: "rgba(0,0,0,0.35)",
+                fontFamily: "var(--font-planc), serif",
+              }}
+            >
+              LOGO GELECEK
+            </span>
+          </div>
+
+          {/* Right: empty */}
+          <div style={{ width: 32 }} />
+        </div>
+      </div>
+
+      {/* PROGRESS BAR ROW — navbar'ın altında, biraz boşlukla */}
+      <div
+        id="gs-progress-row"
+        className="flex items-center px-6 mt-4"
+        style={{ opacity: 0 }}
+      >
+        {/* Avatar */}
+        <div className="flex-shrink-0 mr-3">
+          <img
+            src="/Avatar_Set/face/face.png"
+            alt="avatar"
+            className="rounded-full border border-[#1A1A1A]"
+            style={{ width: "32px", height: "32px" }}
           />
         </div>
-      )}
+
+        {/* Progress bar - dolu kutu stili */}
+        <div
+          className="flex-1 relative"
+          style={{
+            height: "6px",
+            backgroundColor: "#D4D4D4",
+            borderRadius: "3px",
+          }}
+        >
+          {/* Filled portion */}
+          <div
+            style={{
+              position: "absolute",
+              left: 0,
+              top: 0,
+              bottom: 0,
+              width: `${((round - 1) / totalRounds) * 100}%`,
+              backgroundColor: "#1A1A1A",
+              borderRadius: "3px",
+              transition: "width 0.5s ease",
+            }}
+          />
+
+          {/* Tick marks — eşit aralıklı bölümler */}
+          <div className="absolute inset-0 flex items-center justify-between pointer-events-none">
+            {Array.from({ length: totalRounds + 1 }).map((_, i) => (
+              <div
+                key={i}
+                style={{
+                  width: "1.5px",
+                  height: "16px",
+                  backgroundColor: "#1A1A1A",
+                  marginTop: "-5px",
+                }}
+              />
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* RIGHT PANEL — progress bar'ın altında, sağa yaslanmış */}
+      <div
+        id="gs-right-panel"
+        className="flex flex-col items-end gap-[5px] px-6 mt-4"
+        style={{ opacity: 0, alignSelf: "flex-end" }}
+      >
+        {/* HEX Badge */}
+        <div
+          className="flex items-center justify-center border border-[#1A1A1A]"
+          style={{
+            backgroundColor: nickname || "#F7BEA0",
+            width: `${panelWidth}px`,
+            height: "32px",
+          }}
+        >
+          <span
+            style={{
+              fontFamily: "var(--font-planc), serif",
+              fontWeight: 700,
+              fontSize: "13px",
+              color: "#1A1A1A",
+            }}
+          >
+            HEX&nbsp;
+          </span>
+          <span
+            style={{
+              fontFamily: "var(--font-planc), serif",
+              fontWeight: 450,
+              fontSize: "13px",
+              color: "#1A1A1A",
+            }}
+          >
+            {nickname?.toUpperCase() || "#F7BEA0"}
+          </span>
+        </div>
+
+        {/* Score boxes — 6 kutu, panel genişliğine eşit */}
+        <div className="flex" style={{ width: `${panelWidth}px` }}>
+          {Array.from({ length: totalRounds }).map((_, i) => (
+            <div
+              key={i}
+              className="flex items-center justify-center border border-[#1A1A1A]"
+              style={{
+                flex: 1,
+                height: "32px",
+                backgroundColor:
+                  i < round - 1
+                    ? i < score
+                      ? "#4CAF50"
+                      : "#FF5252"
+                    : "#FFFFFF",
+                color: i < round - 1 ? "#fff" : "#1A1A1A",
+                fontFamily: "var(--font-planc), serif",
+                fontSize: "13px",
+                fontWeight: 500,
+              }}
+            >
+              {i + 1}
+            </div>
+          ))}
+        </div>
+
+        {/* Timer — aynı genişlik */}
+        <div
+          className="flex items-center justify-center border border-[#1A1A1A]"
+          style={{
+            width: `${panelWidth}px`,
+            height: "32px",
+            backgroundColor: "#FFFFFF",
+            fontFamily: "var(--font-planc), serif",
+            fontSize: "13px",
+            fontWeight: 500,
+            color: "#1A1A1A",
+          }}
+        >
+          {formatTime(timeLeft)}
+        </div>
+      </div>
+
+      {/* GAME AREA */}
+      <div
+        id="gs-game-area"
+        className="flex-1 flex items-center justify-center mt-6"
+        style={{ opacity: 0 }}
+      >
+        {children ? (
+          children({
+            score,
+            round,
+            totalRounds,
+            timeLeft,
+            isPlaying,
+            onAnswer,
+            setLiveScoreGetter: (getter: () => number) =>
+              setLiveScoreGetter(() => getter),
+            endGame,
+          })
+        ) : (
+          <p className="font-planc text-[16px] text-[#999]">{gameName || ""}</p>
+        )}
+      </div>
+
+      {/* Footer */}
+      <div className="absolute bottom-4 right-6 flex flex-col items-end">
+        <span className="text-[9px] text-[#999]">created by</span>
+        <span
+          className="text-[11px] text-[#666]"
+          style={{ fontFamily: "var(--font-planc), serif", fontWeight: 700 }}
+        >
+          #Sideyo
+        </span>
+      </div>
     </div>
   );
 }
+
+export default GameShell;

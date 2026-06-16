@@ -162,13 +162,13 @@ export function GameShell({
         </div>
       </div>
 
-      {/* PROGRESS BAR ROW */}
+      {/* PROGRESS BAR */}
       <div
         id="gs-progress-row"
-        className="flex items-center px-6 mt-4"
+        className="flex items-center gap-3 px-6 mt-4 flex-shrink-0"
         style={{ opacity: 0 }}
       >
-        <div className="flex-shrink-0 mr-3">
+        <div className="flex-shrink-0">
           <img
             src="/Avatar_Set/face/face.png"
             alt="avatar"
@@ -178,7 +178,7 @@ export function GameShell({
         </div>
 
         <div
-          className="flex-1 relative"
+          className="flex-1 min-w-0 relative"
           style={{
             height: "6px",
             backgroundColor: "#D4D4D4",
@@ -213,101 +213,103 @@ export function GameShell({
         </div>
       </div>
 
-      {/* RIGHT PANEL */}
-      <div
-        id="gs-right-panel"
-        className="flex flex-col items-end gap-[5px] px-6 mt-4"
-        style={{ opacity: 0, alignSelf: "flex-end" }}
-      >
-        <div
-          className="flex items-center justify-center border border-[#1A1A1A]"
-          style={{
-            backgroundColor: nickname || "#F7BEA0",
-            width: `${panelWidth}px`,
-            height: "32px",
-          }}
-        >
-          <span
-            style={{
-              fontFamily: "var(--font-planc), serif",
-              fontWeight: 700,
-              fontSize: "13px",
-              color: "#1A1A1A",
-            }}
-          >
-            HEX&nbsp;
-          </span>
-          <span
-            style={{
-              fontFamily: "var(--font-planc), serif",
-              fontWeight: 450,
-              fontSize: "13px",
-              color: "#1A1A1A",
-            }}
-          >
-            {nickname?.toUpperCase() || "#F7BEA0"}
-          </span>
-        </div>
-
-        <div className="flex" style={{ width: `${panelWidth}px` }}>
-          {String(score)
-            .padStart(6, "0")
-            .split("")
-            .map((digit, i) => (
-              <div
-                key={i}
-                className="flex items-center justify-center border border-[#1A1A1A]"
-                style={{
-                  flex: 1,
-                  height: "32px",
-                  backgroundColor: "#FFFFFF",
-                  color: "#1A1A1A",
-                  fontFamily: "var(--font-planc), serif",
-                  fontSize: "13px",
-                  fontWeight: 500,
-                }}
-              >
-                {digit}
-              </div>
-            ))}
-        </div>
-
-        <div
-          className="flex items-center justify-center border border-[#1A1A1A]"
-          style={{
-            width: `${panelWidth}px`,
-            height: "32px",
-            backgroundColor: "#FFFFFF",
-            fontFamily: "var(--font-planc), serif",
-            fontSize: "13px",
-            fontWeight: 500,
-            color: "#1A1A1A",
-          }}
-        >
-          {formatTime(timeLeft)}
-        </div>
-      </div>
-
       {/* GAME AREA */}
       <div
         id="gs-game-area"
-        className="flex-1 flex items-center justify-center mt-6"
+        className="relative flex-1 min-h-0 mt-2"
         style={{ opacity: 0 }}
       >
+        {/* Sağ göstergeler — sol kutu ile simetrik, barın altında */}
+        <div
+          id="gs-right-panel"
+          className="absolute top-0 right-6 z-10 flex flex-col items-end gap-[5px]"
+          style={{ opacity: 0 }}
+        >
+          <div
+            className="flex items-center justify-center border border-[#1A1A1A]"
+            style={{
+              backgroundColor: nickname || "#F7BEA0",
+              width: `${panelWidth}px`,
+              height: "32px",
+            }}
+          >
+            <span
+              style={{
+                fontFamily: "var(--font-planc), serif",
+                fontWeight: 700,
+                fontSize: "13px",
+                color: "#1A1A1A",
+              }}
+            >
+              HEX&nbsp;
+            </span>
+            <span
+              style={{
+                fontFamily: "var(--font-planc), serif",
+                fontWeight: 450,
+                fontSize: "13px",
+                color: "#1A1A1A",
+              }}
+            >
+              {nickname?.toUpperCase() || "#F7BEA0"}
+            </span>
+          </div>
+
+          <div className="flex" style={{ width: `${panelWidth}px` }}>
+            {String(score)
+              .padStart(6, "0")
+              .split("")
+              .map((digit, i) => (
+                <div
+                  key={i}
+                  className="flex items-center justify-center border border-[#1A1A1A]"
+                  style={{
+                    flex: 1,
+                    height: "32px",
+                    backgroundColor: "#FFFFFF",
+                    color: "#1A1A1A",
+                    fontFamily: "var(--font-planc), serif",
+                    fontSize: "13px",
+                    fontWeight: 500,
+                  }}
+                >
+                  {digit}
+                </div>
+              ))}
+          </div>
+
+          <div
+            className="flex items-center justify-center border border-[#1A1A1A]"
+            style={{
+              width: `${panelWidth}px`,
+              height: "32px",
+              backgroundColor: "#FFFFFF",
+              fontFamily: "var(--font-planc), serif",
+              fontSize: "13px",
+              fontWeight: 500,
+              color: "#1A1A1A",
+            }}
+          >
+            {formatTime(timeLeft)}
+          </div>
+        </div>
+
         {children ? (
-          children({
-            score,
-            round,
-            totalRounds,
-            timeLeft,
-            isPlaying,
-            shellReady,
-            onAnswer,
-            setLiveScoreGetter: (getter: () => number) =>
-              setLiveScoreGetter(() => getter),
-            endGame,
-            startGame,
-          })
+          <div className="absolute inset-0">
+            {children({
+              score,
+              round,
+              totalRounds,
+              timeLeft,
+              isPlaying,
+              shellReady,
+              onAnswer,
+              setLiveScoreGetter: (getter: () => number) =>
+                setLiveScoreGetter(() => getter),
+              endGame,
+              startGame,
+            })}
+          </div>
         ) : (
           <p className="font-planc text-[16px] text-[#999]">{gameName || ""}</p>
         )}

@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import gsap from "gsap";
+import ArrowKeycap, { type ArrowKeycapHandle } from "@/components/ArrowKeycap";
 
 interface OpticalPanicProps {
   isPlaying: boolean;
@@ -9,6 +10,7 @@ interface OpticalPanicProps {
   onAnswer: (correct: boolean) => void;
   onGameStart: () => void;
   round: number;
+  timeLeft: number;
 }
 
 const WORDS = [
@@ -20,17 +22,20 @@ const WORDS = [
 
 type Phase = "waiting" | "intro" | "playing" | "landed";
 
+const WORD_BOTTOM = "14%";
+const SPAWN_OFFSET_FROM_TOP = 8;
+
 export default function OpticalPanic({
   isPlaying,
   shellReady,
   onAnswer,
   onGameStart,
   round,
+  timeLeft,
 }: OpticalPanicProps) {
   const [phase, setPhase] = useState<Phase>("waiting");
   const [currentWord, setCurrentWord] = useState(WORDS[0]!);
   const [landed, setLanded] = useState(false);
-  const [score, setScore] = useState<number | null>(null);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const fallingRef = useRef<HTMLDivElement>(null);
@@ -39,25 +44,28 @@ export default function OpticalPanic({
   const animRef = useRef<gsap.core.Tween | null>(null);
   const introCardRef = useRef<HTMLDivElement>(null);
   const descBoxRef = useRef<HTMLDivElement>(null);
-  const wordAreaRef = useRef<HTMLDivElement>(null);
   const controlsRef = useRef<HTMLDivElement>(null);
-  const leftBtnRef = useRef<HTMLButtonElement>(null);
-  const rightBtnRef = useRef<HTMLButtonElement>(null);
+  const leftKeyRef = useRef<ArrowKeycapHandle>(null);
+  const rightKeyRef = useRef<ArrowKeycapHandle>(null);
   const noteRef = useRef<HTMLDivElement>(null);
+  const wordAreaRef = useRef<HTMLDivElement>(null);
+  const wordTextRef = useRef<HTMLDivElement>(null);
   const handleLandRef = useRef<() => void>(() => {});
+  const landedRef = useRef(false);
   const hasStartedRef = useRef(false);
 
-  const FALL_DURATION = 18;
+  const FALL_DURATION = 8;
   const STEP_SIZE = 2;
-  const SPAWN_OFFSET_FROM_TOP = 8;
+  const RED_REVEAL_DELAY = 2500;
+  const NOTE_REVEAL_DELAY = 4000;
 
   const getFallStartY = useCallback(() => {
     const container = containerRef.current;
-    const wordArea = wordAreaRef.current;
-    if (!container || !wordArea) return -1200;
+    const wordText = wordTextRef.current;
+    if (!container || !wordText) return -1200;
 
     const containerRect = container.getBoundingClientRect();
-    const wordRect = wordArea.getBoundingClientRect();
+    const wordRect = wordText.getBoundingClientRect();
     const baselineFromTop = wordRect.bottom - containerRect.top;
 
     return -(baselineFromTop - SPAWN_OFFSET_FROM_TOP);
@@ -78,40 +86,35 @@ export default function OpticalPanic({
       gsap.set(fallingRef.current, {
         y: getFallStartY(),
         x: fallingXRef.current,
+        visibility: "hidden",
       });
     }
     setLanded(false);
-    setScore(null);
+    landedRef.current = false;
   }, [getFallStartY]);
 
-  // --- handleLand ref ---
   useEffect(() => {
     handleLandRef.current = () => {
-      if (landed) return;
+      if (landedRef.current) return;
+      landedRef.current = true;
       setLanded(true);
       setPhase("landed");
+
+      animRef.current?.kill();
+      if (fallingRef.current) {
+        gsap.set(fallingRef.current, { y: 0, x: fallingXRef.current });
+      }
 
       const currentX = gsap.getProperty(fallingRef.current, "x") as number;
       const distance = Math.abs(typeof currentX === "number" ? currentX : 0);
       let points = 0;
 
-      if (distance <= 2) {
-        points = 100;
-      } else if (distance <= 5) {
-        points = 90;
-      } else if (distance <= 10) {
-        points = 75;
-      } else if (distance <= 20) {
-        points = 50;
-      } else if (distance <= 40) {
-        points = 25;
-      } else {
-        points = 0;
-      }
+      if (distance <= 2) points = 100;
+      else if (distance <= 5) points = 90;
+      else if (distance <= 10) points = 75;
+      else if (distance <= 20) points = 50;
+      else if (distance <= 40) points = 25;
 
-      setScore(points);
-
-      // Kırmızı doğru pozisyon harfi göster
       setTimeout(() => {
         if (correctCharRef.current) {
           gsap.to(correctCharRef.current, {
@@ -120,9 +123,8 @@ export default function OpticalPanic({
             ease: "power2.out",
           });
         }
-      }, 300);
+      }, RED_REVEAL_DELAY);
 
-      // Not bandı aç
       setTimeout(() => {
         if (noteRef.current) {
           gsap.to(noteRef.current, {
@@ -133,15 +135,14 @@ export default function OpticalPanic({
             ease: "back.out(1.4)",
           });
         }
-      }, 1000);
+      }, NOTE_REVEAL_DELAY);
 
       setTimeout(() => {
         onAnswer(points >= 50);
-      }, 3500);
+      }, NOTE_REVEAL_DELAY + 2500);
     };
-  }, [landed, onAnswer]);
+  }, [onAnswer]);
 
-  // --- Popup bitince harf düşmeye başlar ---
   useEffect(() => {
     if (!shellReady || hasStartedRef.current) return;
     hasStartedRef.current = true;
@@ -185,7 +186,7 @@ export default function OpticalPanic({
         { y: 0, opacity: 1, duration: 0.8, ease: "back.out(1.2)" },
         0.15,
       );
-      tl.to({}, { duration: 1.5 });
+      tl.to({}, { duration: 0.8 });
       tl.to(card, {
         y: "100vh",
         opacity: 0,
@@ -199,7 +200,28 @@ export default function OpticalPanic({
     };
   }, [shellReady, onGameStart, prepareRound]);
 
-  // --- Harf düşme animasyonu (popup bittikten sonra) ---
+  useEffect(() => {
+    if (phase === "intro" || phase === "playing") {
+      if (correctCharRef.current) {
+        gsap.set(correctCharRef.current, { opacity: 0 });
+      }
+    }
+  }, [phase, currentWord]);
+
+  // Düşen harf mount olur olmaz üst pozisyona al — y:0 flaşını önle
+  useLayoutEffect(() => {
+    if (phase !== "playing" || landed) return;
+    const el = fallingRef.current;
+    if (!el) return;
+
+    const startY = getFallStartY();
+    gsap.set(el, {
+      y: startY,
+      x: fallingXRef.current,
+      visibility: "hidden",
+    });
+  }, [phase, landed, round, getFallStartY]);
+
   useEffect(() => {
     if (phase !== "playing" || !isPlaying || landed) return;
 
@@ -210,13 +232,22 @@ export default function OpticalPanic({
 
     const startFall = () => {
       const startY = getFallStartY();
-      gsap.set(el, { y: startY, x: fallingXRef.current });
+
+      if (Math.abs(startY) < 80) {
+        gsap.set(el, { visibility: "hidden" });
+        frameId = requestAnimationFrame(startFall);
+        return;
+      }
+
+      gsap.set(el, { y: startY, x: fallingXRef.current, visibility: "visible" });
 
       animRef.current = gsap.to(el, {
         y: 0,
         duration: FALL_DURATION,
         ease: "none",
         onComplete: () => {
+          const finalY = gsap.getProperty(el, "y") as number;
+          if (Math.abs(finalY) > 0.5) return;
           handleLandRef.current();
         },
       });
@@ -232,70 +263,72 @@ export default function OpticalPanic({
     };
   }, [phase, isPlaying, landed, round, getFallStartY]);
 
-  // --- Sol/Sağ hareket ---
+  // Süre bitince harfi anında aşağı indir
+  useEffect(() => {
+    if (!isPlaying || phase !== "playing" || landedRef.current || timeLeft > 0) return;
+
+    if (fallingRef.current) {
+      gsap.set(fallingRef.current, { y: 0, x: fallingXRef.current });
+    }
+    handleLandRef.current();
+  }, [isPlaying, phase, timeLeft]);
+
   const moveLeft = useCallback(() => {
     if (landed || phase !== "playing" || !fallingRef.current) return;
     fallingXRef.current -= STEP_SIZE;
     gsap.set(fallingRef.current, { x: fallingXRef.current });
-
-    if (leftBtnRef.current) {
-      gsap.to(leftBtnRef.current, {
-        backgroundColor: "#1A1A1A",
-        color: "#fff",
-        scale: 0.92,
-        duration: 0.06,
-        yoyo: true,
-        repeat: 1,
-      });
-    }
   }, [landed, phase]);
 
   const moveRight = useCallback(() => {
     if (landed || phase !== "playing" || !fallingRef.current) return;
     fallingXRef.current += STEP_SIZE;
     gsap.set(fallingRef.current, { x: fallingXRef.current });
-
-    if (rightBtnRef.current) {
-      gsap.to(rightBtnRef.current, {
-        backgroundColor: "#1A1A1A",
-        color: "#fff",
-        scale: 0.92,
-        duration: 0.06,
-        yoyo: true,
-        repeat: 1,
-      });
-    }
   }, [landed, phase]);
 
-  // --- Klavye ---
   useEffect(() => {
-    const handleKey = (e: KeyboardEvent) => {
+    const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "ArrowLeft") {
         e.preventDefault();
+        leftKeyRef.current?.press();
         moveLeft();
       } else if (e.key === "ArrowRight") {
         e.preventDefault();
+        rightKeyRef.current?.press();
         moveRight();
       }
     };
 
-    window.addEventListener("keydown", handleKey);
-    return () => window.removeEventListener("keydown", handleKey);
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        leftKeyRef.current?.release();
+      } else if (e.key === "ArrowRight") {
+        e.preventDefault();
+        rightKeyRef.current?.release();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("keyup", handleKeyUp);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("keyup", handleKeyUp);
+    };
   }, [moveLeft, moveRight]);
 
-  // --- Render ---
   const wordChars = currentWord.word.split("");
   const charStyle = {
     fontSize: "clamp(120px, 22vw, 340px)",
     fontFamily: "var(--font-planc), serif",
     fontWeight: 600,
     letterSpacing: "0",
+    lineHeight: 1,
   } as const;
 
   return (
     <div
       ref={containerRef}
-      className="relative w-full h-full flex flex-col items-center justify-end overflow-hidden select-none"
+      className="absolute inset-0 overflow-visible select-none"
     >
       {/* INTRO CARD */}
       <div
@@ -323,10 +356,10 @@ export default function OpticalPanic({
         </div>
       </div>
 
-      {/* SOL PANEL — avatar altı kutu + ok tuşları */}
+      {/* SOL PANEL — avatar altı */}
       <div
-        className="absolute top-0 left-0 z-20 flex flex-col"
-        style={{ padding: "8px 24px", gap: "12px" }}
+        className="absolute top-0 left-0 z-10 flex flex-col"
+        style={{ paddingLeft: "24px", gap: "12px" }}
       >
         <div
           ref={descBoxRef}
@@ -363,184 +396,152 @@ export default function OpticalPanic({
           </p>
         </div>
 
-        <div ref={controlsRef} style={{ opacity: 0 }}>
-          <div style={{ display: "flex" }}>
-            <button
-              ref={leftBtnRef}
-              onClick={moveLeft}
-              style={{
-                width: "36px",
-                height: "36px",
-                border: "1.5px solid #1A1A1A",
-                backgroundColor: "#fff",
-                color: "#1A1A1A",
-                fontSize: "14px",
-                fontWeight: 700,
-                cursor: "pointer",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-              aria-label="Move left"
-            >
-              ←
-            </button>
-            <button
-              disabled
-              style={{
-                width: "36px",
-                height: "36px",
-                borderTop: "1.5px solid #1A1A1A",
-                borderBottom: "1.5px solid #1A1A1A",
-                borderLeft: "none",
-                borderRight: "none",
-                backgroundColor: "#fff",
-                color: "#999",
-                fontSize: "14px",
-                fontWeight: 700,
-                cursor: "default",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-              aria-label="Move down"
-            >
-              ↓
-            </button>
-            <button
-              ref={rightBtnRef}
-              onClick={moveRight}
-              style={{
-                width: "36px",
-                height: "36px",
-                border: "1.5px solid #1A1A1A",
-                backgroundColor: "#fff",
-                color: "#1A1A1A",
-                fontSize: "14px",
-                fontWeight: 700,
-                cursor: "pointer",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-              aria-label="Move right"
-            >
-              →
-            </button>
-          </div>
+        <div ref={controlsRef} style={{ opacity: 0, display: "flex", gap: "8px" }}>
+          <ArrowKeycap
+            ref={leftKeyRef}
+            direction="left"
+            onPress={moveLeft}
+            ariaLabel="Move left"
+          />
+          <ArrowKeycap
+            ref={rightKeyRef}
+            direction="right"
+            onPress={moveRight}
+            ariaLabel="Move right"
+          />
+        </div>
+
+        {/* Uyarı kutusu — ok tuşlarının hemen altında */}
+        <div
+          ref={noteRef}
+          style={{
+            opacity: 0,
+            transform: "scaleX(0) scaleY(0)",
+            transformOrigin: "top left",
+            backgroundColor: "#1A1A1A",
+            padding: "10px 12px",
+            width: "190px",
+          }}
+        >
+          <p
+            style={{
+              fontFamily: "var(--font-planc), serif",
+              fontWeight: 450,
+              fontSize: "10px",
+              lineHeight: "14px",
+              color: "#FFFFFF",
+            }}
+          >
+            Yes, we think that&apos;s the right kerning. Got a problem with it?
+            Cry here → info@artistudyo.com
+          </p>
         </div>
       </div>
 
-      {/* KELİME — sabit + düşen harf aynı wrapper içinde */}
+      {/* KELİME — sabit katman */}
       {(phase === "intro" || phase === "playing" || phase === "landed") && (
         <div
           ref={wordAreaRef}
-          className="absolute bottom-[4%] left-0 right-0 flex justify-center"
+          className="absolute left-[3%] right-[3%] z-[5] flex flex-col items-stretch"
+          style={{ bottom: WORD_BOTTOM, gap: 0 }}
         >
-          <div className="relative flex justify-center items-baseline">
-            {wordChars.map((char, i) => (
-              <span
-                key={`static-${i}`}
-                className="leading-none"
-                style={{
-                  ...charStyle,
-                  color:
-                    i === currentWord.missingIndex ? "transparent" : "#1A1A1A",
-                }}
+          <div className="flex justify-center">
+            <div
+              ref={wordTextRef}
+              className="relative inline-flex justify-center items-end leading-none"
+            >
+              {wordChars.map((char, i) => (
+                <span
+                  key={`static-${i}`}
+                  style={{
+                    ...charStyle,
+                    color:
+                      i === currentWord.missingIndex
+                        ? "transparent"
+                        : "#1A1A1A",
+                  }}
+                >
+                  {char}
+                </span>
+              ))}
+
+              <div
+                ref={correctCharRef}
+                className="absolute inset-0 flex justify-center items-end pointer-events-none"
+                style={{ opacity: 0 }}
               >
-                {char}
-              </span>
-            ))}
-
-            <div
-              ref={correctCharRef}
-              className="absolute inset-0 flex justify-center items-baseline pointer-events-none"
-              style={{ opacity: 0 }}
-            >
-              {wordChars.map((char, i) => (
-                <span
-                  key={`correct-${i}`}
-                  className="leading-none"
-                  style={{
-                    ...charStyle,
-                    color:
-                      i === currentWord.missingIndex
-                        ? "#CC2222"
-                        : "transparent",
-                  }}
-                >
-                  {char}
-                </span>
-              ))}
-            </div>
-
-            <div
-              ref={fallingRef}
-              className="absolute inset-0 flex justify-center items-baseline pointer-events-none"
-              style={{
-                visibility:
-                  phase === "playing" || phase === "landed"
-                    ? "visible"
-                    : "hidden",
-              }}
-            >
-              {wordChars.map((char, i) => (
-                <span
-                  key={`falling-${i}`}
-                  className="leading-none"
-                  style={{
-                    ...charStyle,
-                    color:
-                      i === currentWord.missingIndex
-                        ? "#1A1A1A"
-                        : "transparent",
-                  }}
-                >
-                  {char}
-                </span>
-              ))}
+                {wordChars.map((char, i) => (
+                  <span
+                    key={`correct-${i}`}
+                    style={{
+                      ...charStyle,
+                      color:
+                        i === currentWord.missingIndex
+                          ? "#CC2222"
+                          : "transparent",
+                    }}
+                  >
+                    {char}
+                  </span>
+                ))}
+              </div>
             </div>
           </div>
+
+          <div
+            className="pointer-events-none shrink-0"
+            style={{
+              width: "100%",
+              height: "1.5px",
+              backgroundColor: "#1A1A1A",
+            }}
+          />
         </div>
       )}
 
-      {/* NOT BANDI — + şeklinden açılır */}
-      <div
-        ref={noteRef}
-        className="absolute z-30 pointer-events-auto"
-        style={{
-          bottom: "18%",
-          left: "24px",
-          opacity: 0,
-          transform: "scaleX(0) scaleY(0)",
-          transformOrigin: "center center",
-          backgroundColor: "#1A1A1A",
-          padding: "10px 16px",
-          maxWidth: "260px",
-        }}
-      >
-        <p
-          style={{
-            fontFamily: "var(--font-planc), serif",
-            fontWeight: 450,
-            fontSize: "12px",
-            lineHeight: "16px",
-            color: "#FFFFFF",
-            letterSpacing: "0%",
-          }}
+      {/* DÜŞEN HARF — kelime satırıyla aynı hizada */}
+      {(phase === "playing" || phase === "landed") && (
+        <div
+          className="absolute left-[3%] right-[3%] z-[25] flex flex-col pointer-events-none"
+          style={{ bottom: WORD_BOTTOM }}
         >
-          Yes, we think that&apos;s the right kerning. Got a problem with it?
-          Cry here → info@artistudyo.com
-        </p>
-      </div>
+          <div className="flex justify-center">
+            <div className="relative inline-flex justify-center items-end leading-none">
+              {wordChars.map((char, i) => (
+                <span
+                  key={`ghost-${i}`}
+                  aria-hidden
+                  style={{ ...charStyle, visibility: "hidden" }}
+                >
+                  {char}
+                </span>
+              ))}
+              <div
+                ref={fallingRef}
+                className="absolute inset-0 flex justify-center items-end pointer-events-none"
+                style={{ visibility: "hidden" }}
+              >
+                {wordChars.map((char, i) => (
+                  <span
+                    key={`falling-${i}`}
+                    style={{
+                      ...charStyle,
+                      color:
+                        i === currentWord.missingIndex
+                          ? "#1A1A1A"
+                          : "transparent",
+                    }}
+                  >
+                    {char}
+                  </span>
+                ))}
+              </div>
+            </div>
+          </div>
+          <div style={{ height: "1.5px", visibility: "hidden" }} />
+        </div>
+      )}
 
-      {/* ALT ÇİZGİ */}
-      <div
-        className="absolute bottom-[3%] left-[3%] right-[3%]"
-        style={{ height: "1.5px", backgroundColor: "#1A1A1A" }}
-      />
-
-      {/* OK KONTROLLERİ — sol panelde (desc box altında) */}
     </div>
   );
 }

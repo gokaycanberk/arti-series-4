@@ -66,7 +66,7 @@ export default function OnboardingPage() {
             onAnswer,
             startGame,
             round,
-            totalRounds,
+            timeLeft,
           }: GameShellChildState) => (
             <OpticalPanic
               isPlaying={isPlaying}
@@ -74,6 +74,7 @@ export default function OnboardingPage() {
               onAnswer={onAnswer}
               onGameStart={startGame}
               round={round}
+              timeLeft={timeLeft}
             />
           )}
         </GameShell>

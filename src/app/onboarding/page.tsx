@@ -2,7 +2,9 @@
 
 import { useState } from "react";
 import ColorPicker from "@/components/ColorPicker";
-import GameShell from "@/components/GameShell";
+import { GameShell } from "@/components/GameShell";
+import type { GameShellChildState } from "@/components/GameShell";
+import OpticalPanic from "@/components/games/OpticalPanic";
 
 type Phase = "picking" | "transitioning" | "game";
 
@@ -19,14 +21,14 @@ export default function OnboardingPage() {
 
   return (
     <div className="fixed inset-0 h-screen w-screen overflow-hidden bg-[#E8E8E8]">
-      {/* Flash overlay — her zaman DOM'da, ColorPicker animasyondan bağımsız */}
+      {/* Flash overlay */}
       <div
         id="flash-overlay"
         className="fixed inset-0 z-[9999] pointer-events-none"
         style={{ backgroundColor: "white", opacity: 0 }}
       />
 
-      {/* Face reveal — her zaman DOM'da */}
+      {/* Face reveal */}
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         id="face-reveal"
@@ -52,7 +54,30 @@ export default function OnboardingPage() {
         />
       )}
 
-      {phase === "game" && <GameShell />}
+      {phase === "game" && (
+        <GameShell
+          resetKey="optical-panic"
+          gameName="OPTICAL PANIC"
+          duration={30}
+        >
+          {({
+            isPlaying,
+            shellReady,
+            onAnswer,
+            startGame,
+            round,
+            totalRounds,
+          }: GameShellChildState) => (
+            <OpticalPanic
+              isPlaying={isPlaying}
+              shellReady={shellReady}
+              onAnswer={onAnswer}
+              onGameStart={startGame}
+              round={round}
+            />
+          )}
+        </GameShell>
+      )}
     </div>
   );
 }

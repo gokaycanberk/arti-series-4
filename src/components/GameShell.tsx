@@ -10,9 +10,11 @@ export type GameShellChildState = {
   totalRounds: number;
   timeLeft: number;
   isPlaying: boolean;
+  shellReady: boolean;
   onAnswer: (correct: boolean) => void;
   setLiveScoreGetter: (getter: () => number) => void;
   endGame: () => void;
+  startGame: () => void;
 };
 
 interface GameShellProps {
@@ -26,7 +28,6 @@ interface GameShellProps {
 export function GameShell({
   resetKey,
   gameName,
-  description,
   duration = 30,
   children,
 }: GameShellProps) {
@@ -34,10 +35,9 @@ export function GameShell({
   const [score, setScore] = useState(0);
   const [round, setRound] = useState(1);
   const [timeLeft, setTimeLeft] = useState(duration);
-  const [isPlaying, setIsPlaying] = useState(true);
-  const [liveScoreGetter, setLiveScoreGetter] = useState<(() => number) | null>(
-    null,
-  );
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [shellReady, setShellReady] = useState(false);
+  const [, setLiveScoreGetter] = useState<(() => number) | null>(null);
   const totalRounds = 6;
 
   // Timer
@@ -49,13 +49,14 @@ export function GameShell({
     return () => clearInterval(interval);
   }, [timeLeft, isPlaying]);
 
-  // Reset when resetKey changes
+  // Reset
   useEffect(() => {
     queueMicrotask(() => {
       setScore(0);
       setRound(1);
       setTimeLeft(duration);
-      setIsPlaying(true);
+      setIsPlaying(false);
+      setShellReady(false);
     });
   }, [resetKey, duration]);
 
@@ -70,9 +71,18 @@ export function GameShell({
     setIsPlaying(false);
   }, []);
 
+  const startGame = useCallback(() => {
+    setIsPlaying(true);
+  }, []);
+
   // Entrance animations
   useEffect(() => {
-    const tl = gsap.timeline({ defaults: { ease: "back.out(1.4)" } });
+    const tl = gsap.timeline({
+      defaults: { ease: "back.out(1.4)" },
+      onComplete: () => {
+        setShellReady(true);
+      },
+    });
     tl.fromTo(
       "#gs-navbar",
       { y: -50, opacity: 0 },
@@ -107,7 +117,6 @@ export function GameShell({
     return `${m}:${s}`;
   };
 
-  // Sağ panel genişliği (HEX, skorlar, timer hepsi aynı genişlik)
   const panelWidth = 180;
 
   return (
@@ -115,7 +124,6 @@ export function GameShell({
       {/* NAVBAR */}
       <div id="gs-navbar" style={{ opacity: 0 }}>
         <div className="flex items-center justify-between px-6 py-4">
-          {/* Left: Hamburger */}
           <button
             className="flex flex-col gap-[5px] cursor-pointer"
             aria-label="Menu"
@@ -138,7 +146,6 @@ export function GameShell({
             />
           </button>
 
-          {/* Center: Logo placeholder */}
           <div className="absolute left-1/2 -translate-x-1/2">
             <span
               className="text-[14px] text-[#fff] px-5 py-2 rounded"
@@ -151,18 +158,16 @@ export function GameShell({
             </span>
           </div>
 
-          {/* Right: empty */}
           <div style={{ width: 32 }} />
         </div>
       </div>
 
-      {/* PROGRESS BAR ROW — navbar'ın altında, biraz boşlukla */}
+      {/* PROGRESS BAR ROW */}
       <div
         id="gs-progress-row"
         className="flex items-center px-6 mt-4"
         style={{ opacity: 0 }}
       >
-        {/* Avatar */}
         <div className="flex-shrink-0 mr-3">
           <img
             src="/Avatar_Set/face/face.png"
@@ -172,7 +177,6 @@ export function GameShell({
           />
         </div>
 
-        {/* Progress bar - dolu kutu stili */}
         <div
           className="flex-1 relative"
           style={{
@@ -181,7 +185,6 @@ export function GameShell({
             borderRadius: "3px",
           }}
         >
-          {/* Filled portion */}
           <div
             style={{
               position: "absolute",
@@ -194,8 +197,6 @@ export function GameShell({
               transition: "width 0.5s ease",
             }}
           />
-
-          {/* Tick marks — eşit aralıklı bölümler */}
           <div className="absolute inset-0 flex items-center justify-between pointer-events-none">
             {Array.from({ length: totalRounds + 1 }).map((_, i) => (
               <div
@@ -212,13 +213,12 @@ export function GameShell({
         </div>
       </div>
 
-      {/* RIGHT PANEL — progress bar'ın altında, sağa yaslanmış */}
+      {/* RIGHT PANEL */}
       <div
         id="gs-right-panel"
         className="flex flex-col items-end gap-[5px] px-6 mt-4"
         style={{ opacity: 0, alignSelf: "flex-end" }}
       >
-        {/* HEX Badge */}
         <div
           className="flex items-center justify-center border border-[#1A1A1A]"
           style={{
@@ -249,33 +249,29 @@ export function GameShell({
           </span>
         </div>
 
-        {/* Score boxes — 6 kutu, panel genişliğine eşit */}
         <div className="flex" style={{ width: `${panelWidth}px` }}>
-          {Array.from({ length: totalRounds }).map((_, i) => (
-            <div
-              key={i}
-              className="flex items-center justify-center border border-[#1A1A1A]"
-              style={{
-                flex: 1,
-                height: "32px",
-                backgroundColor:
-                  i < round - 1
-                    ? i < score
-                      ? "#4CAF50"
-                      : "#FF5252"
-                    : "#FFFFFF",
-                color: i < round - 1 ? "#fff" : "#1A1A1A",
-                fontFamily: "var(--font-planc), serif",
-                fontSize: "13px",
-                fontWeight: 500,
-              }}
-            >
-              {i + 1}
-            </div>
-          ))}
+          {String(score)
+            .padStart(6, "0")
+            .split("")
+            .map((digit, i) => (
+              <div
+                key={i}
+                className="flex items-center justify-center border border-[#1A1A1A]"
+                style={{
+                  flex: 1,
+                  height: "32px",
+                  backgroundColor: "#FFFFFF",
+                  color: "#1A1A1A",
+                  fontFamily: "var(--font-planc), serif",
+                  fontSize: "13px",
+                  fontWeight: 500,
+                }}
+              >
+                {digit}
+              </div>
+            ))}
         </div>
 
-        {/* Timer — aynı genişlik */}
         <div
           className="flex items-center justify-center border border-[#1A1A1A]"
           style={{
@@ -305,10 +301,12 @@ export function GameShell({
             totalRounds,
             timeLeft,
             isPlaying,
+            shellReady,
             onAnswer,
             setLiveScoreGetter: (getter: () => number) =>
               setLiveScoreGetter(() => getter),
             endGame,
+            startGame,
           })
         ) : (
           <p className="font-planc text-[16px] text-[#999]">{gameName || ""}</p>

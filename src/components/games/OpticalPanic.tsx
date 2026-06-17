@@ -1,14 +1,17 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import gsap from "gsap";
 import ArrowKeycap, { type ArrowKeycapHandle } from "@/components/ArrowKeycap";
+import ScoreFlyPopup from "@/components/games/ScoreFlyPopup";
+import { scoreFromDistance } from "@/components/games/scoreUtils";
 
 interface OpticalPanicProps {
   isPlaying: boolean;
   shellReady: boolean;
   onAnswer: (correct: boolean) => void;
   onGameStart: () => void;
+  addRoundScore: (points: number) => void;
   round: number;
   timeLeft: number;
 }
@@ -25,17 +28,33 @@ type Phase = "waiting" | "intro" | "playing" | "landed";
 const WORD_BOTTOM = "14%";
 const SPAWN_OFFSET_FROM_TOP = 8;
 
+function getInkBottom(el: HTMLElement): number {
+  const range = document.createRange();
+  range.selectNodeContents(el);
+  const rects = range.getClientRects();
+  if (rects.length === 0) {
+    return el.getBoundingClientRect().bottom;
+  }
+  let bottom = 0;
+  for (const rect of rects) {
+    bottom = Math.max(bottom, rect.bottom);
+  }
+  return bottom;
+}
+
 export default function OpticalPanic({
   isPlaying,
   shellReady,
   onAnswer,
   onGameStart,
+  addRoundScore,
   round,
   timeLeft,
 }: OpticalPanicProps) {
   const [phase, setPhase] = useState<Phase>("waiting");
   const [currentWord, setCurrentWord] = useState(WORDS[0]!);
   const [landed, setLanded] = useState(false);
+  const [flyScore, setFlyScore] = useState<number | null>(null);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const fallingRef = useRef<HTMLDivElement>(null);
@@ -50,26 +69,93 @@ export default function OpticalPanic({
   const noteRef = useRef<HTMLDivElement>(null);
   const wordAreaRef = useRef<HTMLDivElement>(null);
   const wordTextRef = useRef<HTMLDivElement>(null);
+  const wordRowRef = useRef<HTMLDivElement>(null);
+  const baselineRef = useRef<HTMLDivElement>(null);
+  const scoreAnchorRef = useRef<HTMLDivElement>(null);
+  const fallingAreaRef = useRef<HTMLDivElement>(null);
+  const fallingWordRowRef = useRef<HTMLDivElement>(null);
+  const fallingWordWrapRef = useRef<HTMLDivElement>(null);
   const handleLandRef = useRef<() => void>(() => {});
   const landedRef = useRef(false);
   const hasStartedRef = useRef(false);
 
-  const FALL_DURATION = 8;
+  const FALL_DURATION = 10;
   const STEP_SIZE = 2;
-  const RED_REVEAL_DELAY = 2500;
-  const NOTE_REVEAL_DELAY = 4000;
+  const RED_REVEAL_DELAY = 3000;
+  const SCORE_REVEAL_DELAY = 200;
+  const NOTE_AFTER_SCORE_DELAY = 400;
 
   const getFallStartY = useCallback(() => {
     const container = containerRef.current;
     const wordText = wordTextRef.current;
+    const baseline = baselineRef.current;
     if (!container || !wordText) return -1200;
 
     const containerRect = container.getBoundingClientRect();
-    const wordRect = wordText.getBoundingClientRect();
-    const baselineFromTop = wordRect.bottom - containerRect.top;
+    const anchorRect = (baseline ?? wordText).getBoundingClientRect();
+    const baselineFromTop = anchorRect.top - containerRect.top;
 
     return -(baselineFromTop - SPAWN_OFFSET_FROM_TOP);
   }, []);
+
+  const syncFallingRow = useCallback(() => {
+    const wordRow = wordRowRef.current;
+    const fallingRow = fallingWordRowRef.current;
+    const fallingArea = fallingAreaRef.current;
+    if (!wordRow || !fallingRow || !fallingArea) return;
+
+    const wordTop = wordRow.getBoundingClientRect().top;
+    const areaTop = fallingArea.getBoundingClientRect().top;
+    fallingRow.style.transform = `translateY(${wordTop - areaTop}px)`;
+  }, []);
+
+  const trimFontDeadSpace = useCallback((el: HTMLElement | null) => {
+    if (!el) return;
+    el.style.marginBottom = "0";
+
+    const wraps = el.querySelectorAll<HTMLElement>(".optical-panic-char-wrap");
+    wraps.forEach((wrap) => {
+      wrap.style.marginBottom = "0";
+      const glyph = wrap.querySelector<HTMLElement>(".optical-panic-glyph");
+      if (!glyph) return;
+
+      const wrapRect = wrap.getBoundingClientRect();
+      const inkBottom = getInkBottom(glyph);
+      const deadSpace = wrapRect.bottom - inkBottom;
+      if (deadSpace > 0.5) {
+        wrap.style.marginBottom = `-${deadSpace}px`;
+      }
+    });
+  }, []);
+
+  const alignBaseline = useCallback(() => {
+    const text = wordTextRef.current;
+    const line = baselineRef.current;
+    const row = wordRowRef.current;
+    if (!text || !row) return;
+
+    row.style.transform = "none";
+    if (scoreAnchorRef.current) scoreAnchorRef.current.style.transform = "none";
+    if (fallingWordRowRef.current) fallingWordRowRef.current.style.transform = "none";
+    if (line) line.style.marginTop = "0";
+
+    trimFontDeadSpace(text);
+    trimFontDeadSpace(fallingWordWrapRef.current);
+
+    if (line) {
+      const glyphs = text.querySelectorAll<HTMLElement>(".optical-panic-glyph");
+      let inkBottom = 0;
+      glyphs.forEach((glyph) => {
+        inkBottom = Math.max(inkBottom, getInkBottom(glyph));
+      });
+      const gap = line.getBoundingClientRect().top - inkBottom;
+      if (gap > 0.5) {
+        line.style.marginTop = `-${gap}px`;
+      }
+    }
+
+    syncFallingRow();
+  }, [syncFallingRow, trimFontDeadSpace]);
 
   const prepareRound = useCallback(() => {
     const wordObj = WORDS[Math.floor(Math.random() * WORDS.length)]!;
@@ -89,8 +175,36 @@ export default function OpticalPanic({
         visibility: "hidden",
       });
     }
+    if (wordTextRef.current) {
+      wordTextRef.current.style.transform = "";
+      wordTextRef.current.style.marginBottom = "0";
+      wordTextRef.current
+        .querySelectorAll<HTMLElement>(".optical-panic-char-wrap")
+        .forEach((wrap) => {
+          wrap.style.marginBottom = "0";
+        });
+    }
+    if (baselineRef.current) {
+      baselineRef.current.style.marginTop = "0";
+    }
+    if (wordRowRef.current) {
+      wordRowRef.current.style.transform = "";
+    }
+    if (fallingWordRowRef.current) {
+      fallingWordRowRef.current.style.transform = "";
+    }
+    if (fallingWordWrapRef.current) {
+      fallingWordWrapRef.current.style.transform = "";
+      fallingWordWrapRef.current.style.marginBottom = "0";
+      fallingWordWrapRef.current
+        .querySelectorAll<HTMLElement>(".optical-panic-char-wrap")
+        .forEach((wrap) => {
+          wrap.style.marginBottom = "0";
+        });
+    }
     setLanded(false);
     landedRef.current = false;
+    setFlyScore(null);
   }, [getFallStartY]);
 
   useEffect(() => {
@@ -107,13 +221,7 @@ export default function OpticalPanic({
 
       const currentX = gsap.getProperty(fallingRef.current, "x") as number;
       const distance = Math.abs(typeof currentX === "number" ? currentX : 0);
-      let points = 0;
-
-      if (distance <= 2) points = 100;
-      else if (distance <= 5) points = 90;
-      else if (distance <= 10) points = 75;
-      else if (distance <= 20) points = 50;
-      else if (distance <= 40) points = 25;
+      const points = scoreFromDistance(distance);
 
       setTimeout(() => {
         if (correctCharRef.current) {
@@ -126,22 +234,10 @@ export default function OpticalPanic({
       }, RED_REVEAL_DELAY);
 
       setTimeout(() => {
-        if (noteRef.current) {
-          gsap.to(noteRef.current, {
-            scaleX: 1,
-            scaleY: 1,
-            opacity: 1,
-            duration: 0.5,
-            ease: "back.out(1.4)",
-          });
-        }
-      }, NOTE_REVEAL_DELAY);
-
-      setTimeout(() => {
-        onAnswer(points >= 50);
-      }, NOTE_REVEAL_DELAY + 2500);
+        setFlyScore(points);
+      }, RED_REVEAL_DELAY + SCORE_REVEAL_DELAY);
     };
-  }, [onAnswer]);
+  }, [addRoundScore, onAnswer]);
 
   useEffect(() => {
     if (!shellReady || hasStartedRef.current) return;
@@ -208,6 +304,22 @@ export default function OpticalPanic({
     }
   }, [phase, currentWord]);
 
+  useLayoutEffect(() => {
+    const run = () => {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(alignBaseline);
+      });
+    };
+
+    if (phase === "intro" || phase === "playing" || phase === "landed") {
+      run();
+      void document.fonts.ready.then(run);
+    }
+
+    window.addEventListener("resize", alignBaseline);
+    return () => window.removeEventListener("resize", alignBaseline);
+  }, [phase, currentWord, alignBaseline]);
+
   // Düşen harf mount olur olmaz üst pozisyona al — y:0 flaşını önle
   useLayoutEffect(() => {
     if (phase !== "playing" || landed) return;
@@ -239,6 +351,7 @@ export default function OpticalPanic({
         return;
       }
 
+      alignBaseline();
       gsap.set(el, { y: startY, x: fallingXRef.current, visibility: "visible" });
 
       animRef.current = gsap.to(el, {
@@ -261,7 +374,7 @@ export default function OpticalPanic({
       cancelAnimationFrame(frameId);
       animRef.current?.kill();
     };
-  }, [phase, isPlaying, landed, round, getFallStartY]);
+  }, [phase, isPlaying, landed, round, getFallStartY, alignBaseline]);
 
   // Süre bitince harfi anında aşağı indir
   useEffect(() => {
@@ -316,6 +429,30 @@ export default function OpticalPanic({
     };
   }, [moveLeft, moveRight]);
 
+  const handleScoreFlyComplete = useCallback(
+    (points: number) => {
+      addRoundScore(points);
+      setFlyScore(null);
+
+      setTimeout(() => {
+        if (noteRef.current) {
+          gsap.to(noteRef.current, {
+            scaleX: 1,
+            scaleY: 1,
+            opacity: 1,
+            duration: 0.5,
+            ease: "back.out(1.4)",
+          });
+        }
+      }, NOTE_AFTER_SCORE_DELAY);
+
+      setTimeout(() => {
+        onAnswer(points >= 500);
+      }, NOTE_AFTER_SCORE_DELAY + 2000);
+    },
+    [addRoundScore, onAnswer],
+  );
+
   const wordChars = currentWord.word.split("");
   const charStyle = {
     fontSize: "clamp(120px, 22vw, 340px)",
@@ -323,7 +460,30 @@ export default function OpticalPanic({
     fontWeight: 600,
     letterSpacing: "0",
     lineHeight: 1,
+    display: "block",
   } as const;
+
+  const wordTextStyle = {
+    lineHeight: 0,
+    margin: 0,
+    padding: 0,
+  } as const;
+
+  const renderGlyph = (
+    char: string,
+    key: string,
+    color: string,
+    extra?: CSSProperties,
+  ) => (
+    <span key={key} className="optical-panic-char-wrap inline-block align-bottom leading-0">
+      <span
+        className="optical-panic-glyph block"
+        style={{ ...charStyle, color, ...extra }}
+      >
+        {char}
+      </span>
+    </span>
+  );
 
   return (
     <div
@@ -442,59 +602,51 @@ export default function OpticalPanic({
       {(phase === "intro" || phase === "playing" || phase === "landed") && (
         <div
           ref={wordAreaRef}
-          className="absolute left-[3%] right-[3%] z-[5] flex flex-col items-stretch"
-          style={{ bottom: WORD_BOTTOM, gap: 0 }}
+          className="absolute left-[3%] right-[3%] z-[5] flex flex-col leading-none"
+          style={{ bottom: WORD_BOTTOM }}
         >
-          <div className="flex justify-center">
+          <div className="relative flex justify-center">
             <div
-              ref={wordTextRef}
-              className="relative inline-flex justify-center items-end leading-none"
-            >
-              {wordChars.map((char, i) => (
-                <span
-                  key={`static-${i}`}
-                  style={{
-                    ...charStyle,
-                    color:
-                      i === currentWord.missingIndex
-                        ? "transparent"
-                        : "#1A1A1A",
-                  }}
-                >
-                  {char}
-                </span>
-              ))}
-
+              ref={scoreAnchorRef}
+              className="absolute left-1/2 -translate-x-1/2 pointer-events-none"
+              style={{
+                bottom: "100%",
+                marginBottom: "clamp(140px, calc(28vh - 30px), 260px)",
+              }}
+            />
+            <div ref={wordRowRef} className="flex justify-center">
               <div
-                ref={correctCharRef}
-                className="absolute inset-0 flex justify-center items-end pointer-events-none"
-                style={{ opacity: 0 }}
+                ref={wordTextRef}
+                className="relative inline-flex justify-center items-end leading-[0]"
+                style={wordTextStyle}
               >
-                {wordChars.map((char, i) => (
-                  <span
-                    key={`correct-${i}`}
-                    style={{
-                      ...charStyle,
-                      color:
-                        i === currentWord.missingIndex
-                          ? "#CC2222"
-                          : "transparent",
-                    }}
-                  >
-                    {char}
-                  </span>
-                ))}
+                {wordChars.map((char, i) =>
+                  renderGlyph(
+                    char,
+                    `static-${i}`,
+                    i === currentWord.missingIndex ? "transparent" : "#1A1A1A",
+                  ),
+                )}
+
+                <div
+                  ref={correctCharRef}
+                  className="absolute inset-0 flex justify-center items-end pointer-events-none"
+                  style={{ opacity: 0 }}
+                >
+                  {wordChars.map((char, i) =>
+                    renderGlyph(
+                      char,
+                      `correct-${i}`,
+                      i === currentWord.missingIndex ? "#CC2222" : "transparent",
+                    ),
+                  )}
+                </div>
               </div>
             </div>
           </div>
-
           <div
-            className="pointer-events-none shrink-0"
-            style={{
-              width: "100%",
-              height: "1.5px",
-              backgroundColor: "#1A1A1A",
-            }}
+            ref={baselineRef}
+            className="h-[1.5px] w-full shrink-0 bg-[#1A1A1A] pointer-events-none"
           />
         </div>
       )}
@@ -502,44 +654,47 @@ export default function OpticalPanic({
       {/* DÜŞEN HARF — kelime satırıyla aynı hizada */}
       {(phase === "playing" || phase === "landed") && (
         <div
-          className="absolute left-[3%] right-[3%] z-[25] flex flex-col pointer-events-none"
+          ref={fallingAreaRef}
+          className="absolute left-[3%] right-[3%] z-[25] pointer-events-none flex flex-col leading-none"
           style={{ bottom: WORD_BOTTOM }}
         >
-          <div className="flex justify-center">
-            <div className="relative inline-flex justify-center items-end leading-none">
-              {wordChars.map((char, i) => (
-                <span
-                  key={`ghost-${i}`}
-                  aria-hidden
-                  style={{ ...charStyle, visibility: "hidden" }}
-                >
-                  {char}
-                </span>
-              ))}
+          <div ref={fallingWordRowRef} className="flex justify-center">
+            <div
+              ref={fallingWordWrapRef}
+              className="relative inline-flex justify-center items-end leading-[0]"
+              style={wordTextStyle}
+            >
+              {wordChars.map((char, i) =>
+                renderGlyph(char, `ghost-${i}`, "#1A1A1A", {
+                  visibility: "hidden",
+                }),
+              )}
               <div
                 ref={fallingRef}
                 className="absolute inset-0 flex justify-center items-end pointer-events-none"
                 style={{ visibility: "hidden" }}
               >
-                {wordChars.map((char, i) => (
-                  <span
-                    key={`falling-${i}`}
-                    style={{
-                      ...charStyle,
-                      color:
-                        i === currentWord.missingIndex
-                          ? "#1A1A1A"
-                          : "transparent",
-                    }}
-                  >
-                    {char}
-                  </span>
-                ))}
+                {wordChars.map((char, i) =>
+                  renderGlyph(
+                    char,
+                    `falling-${i}`,
+                    i === currentWord.missingIndex ? "#1A1A1A" : "transparent",
+                  ),
+                )}
               </div>
             </div>
           </div>
-          <div style={{ height: "1.5px", visibility: "hidden" }} />
+          <div aria-hidden className="h-[1.5px] w-full shrink-0" />
         </div>
+      )}
+
+      {flyScore !== null && (
+        <ScoreFlyPopup
+          key={flyScore}
+          points={flyScore}
+          anchorRef={scoreAnchorRef}
+          onComplete={() => handleScoreFlyComplete(flyScore)}
+        />
       )}
 
     </div>

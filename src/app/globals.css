@@ -14,6 +14,11 @@
   font-family: "Planc", sans-serif;
 }
 
+.optical-panic-glyph {
+  text-box-trim: trim-end;
+  text-box-edge: cap alphabetic;
+}
+
 /* Monokrom, sadece açık tema — özel tasarım belirteçleri. */
 :root {
   --background: #ffffff;

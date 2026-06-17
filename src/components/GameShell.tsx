@@ -12,6 +12,7 @@ export type GameShellChildState = {
   isPlaying: boolean;
   shellReady: boolean;
   onAnswer: (correct: boolean) => void;
+  addRoundScore: (points: number) => void;
   setLiveScoreGetter: (getter: () => number) => void;
   endGame: () => void;
   startGame: () => void;
@@ -61,10 +62,11 @@ export function GameShell({
   }, [resetKey, duration]);
 
   const onAnswer = useCallback((correct: boolean) => {
-    if (correct) {
-      setScore((prev) => prev + 1);
-    }
     setRound((prev) => prev + 1);
+  }, []);
+
+  const addRoundScore = useCallback((points: number) => {
+    setScore((prev) => prev + points);
   }, []);
 
   const endGame = useCallback(() => {
@@ -255,7 +257,7 @@ export function GameShell({
             </span>
           </div>
 
-          <div className="flex" style={{ width: `${panelWidth}px` }}>
+          <div id="gs-score-digits" className="flex" style={{ width: `${panelWidth}px` }}>
             {String(score)
               .padStart(6, "0")
               .split("")
@@ -304,6 +306,7 @@ export function GameShell({
               isPlaying,
               shellReady,
               onAnswer,
+              addRoundScore,
               setLiveScoreGetter: (getter: () => number) =>
                 setLiveScoreGetter(() => getter),
               endGame,

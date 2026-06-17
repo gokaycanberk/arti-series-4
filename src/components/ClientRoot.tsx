@@ -5,8 +5,6 @@ import { useLayoutEffect } from "react";
 
 import { useGameStore } from "@/stores/gameStore";
 
-import { NicknameModal } from "./NicknameModal";
-
 /**
  * Stem layout — modallar ve global navigasyon; sayfa içerikleri `children` olarak gelir.
  */
@@ -21,7 +19,6 @@ export function ClientRoot({ children }: PropsWithChildren) {
 
   return (
     <>
-      <NicknameModal />
       <div className="flex min-h-screen flex-col bg-background">
         <main className="flex flex-1 flex-col">{children}</main>
       </div>

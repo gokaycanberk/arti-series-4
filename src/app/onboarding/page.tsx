@@ -64,6 +64,7 @@ export default function OnboardingPage() {
             isPlaying,
             shellReady,
             onAnswer,
+            addRoundScore,
             startGame,
             round,
             timeLeft,
@@ -73,6 +74,7 @@ export default function OnboardingPage() {
               shellReady={shellReady}
               onAnswer={onAnswer}
               onGameStart={startGame}
+              addRoundScore={addRoundScore}
               round={round}
               timeLeft={timeLeft}
             />

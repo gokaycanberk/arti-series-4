@@ -7,11 +7,13 @@ import ScoreFlyPopup from "@/components/games/ScoreFlyPopup";
 import { scoreFromDistance } from "@/components/games/scoreUtils";
 
 interface OpticalPanicProps {
+  gameKey: string;
   isPlaying: boolean;
   shellReady: boolean;
   onAnswer: (correct: boolean) => void;
   onGameStart: () => void;
   addRoundScore: (points: number) => void;
+  onGameComplete?: () => void;
   round: number;
   timeLeft: number;
 }
@@ -43,11 +45,13 @@ function getInkBottom(el: HTMLElement): number {
 }
 
 export default function OpticalPanic({
+  gameKey,
   isPlaying,
   shellReady,
   onAnswer,
   onGameStart,
   addRoundScore,
+  onGameComplete,
   round,
   timeLeft,
 }: OpticalPanicProps) {
@@ -77,7 +81,10 @@ export default function OpticalPanic({
   const fallingWordWrapRef = useRef<HTMLDivElement>(null);
   const handleLandRef = useRef<() => void>(() => {});
   const landedRef = useRef(false);
-  const hasStartedRef = useRef(false);
+  const onGameStartRef = useRef(onGameStart);
+  useEffect(() => {
+    onGameStartRef.current = onGameStart;
+  });
 
   const FALL_DURATION = 10;
   const STEP_SIZE = 2;
@@ -240,8 +247,7 @@ export default function OpticalPanic({
   }, [addRoundScore, onAnswer]);
 
   useEffect(() => {
-    if (!shellReady || hasStartedRef.current) return;
-    hasStartedRef.current = true;
+    if (!shellReady) return;
 
     prepareRound();
     setPhase("intro");
@@ -253,7 +259,7 @@ export default function OpticalPanic({
     const tl = gsap.timeline({
       onComplete: () => {
         setPhase("playing");
-        onGameStart();
+        onGameStartRef.current();
       },
     });
 
@@ -294,7 +300,8 @@ export default function OpticalPanic({
     return () => {
       tl.kill();
     };
-  }, [shellReady, onGameStart, prepareRound]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shellReady, gameKey]);
 
   useEffect(() => {
     if (phase === "intro" || phase === "playing") {
@@ -448,9 +455,10 @@ export default function OpticalPanic({
 
       setTimeout(() => {
         onAnswer(points >= 500);
+        onGameComplete?.();
       }, NOTE_AFTER_SCORE_DELAY + 2000);
     },
-    [addRoundScore, onAnswer],
+    [addRoundScore, onAnswer, onGameComplete],
   );
 
   const wordChars = currentWord.word.split("");

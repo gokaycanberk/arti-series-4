@@ -8,20 +8,42 @@ interface ScoreFlyPopupProps {
   points: number;
   anchorRef: React.RefObject<HTMLElement | null>;
   onComplete?: () => void;
+  /** Skor paneli hedefi — varsayılan: GameShell `#gs-score-digits` */
+  targetId?: string;
+  /** getScoreLabel yerine özel etiket */
+  label?: string | null;
 }
 
 const SCORE_FONT_SIZE = 200;
 const SCORE_HOLD_DURATION = 1.5;
-const SCORE_FLY_DURATION = 1.45;
-const SCORE_ARC_LIFT = 150;
-const LAYER_COLORS = ["#00E5FF", "#26C6DA", "#00ACC1", "#00838F", "#006064"];
+const SCORE_FLY_DURATION = 1.9;
+const SCORE_ARC_LIFT = 130;
+
+const GLYPH_LAYERS = ["#7CBFC8", "#5AAFB9", "#388897", "#266878"];
+const GLYPH_MAIN = "#BF406C";
+const TRAIL_COLORS = [
+  "#5AD8FF",
+  "#69F0AE",
+  "#FF80AB",
+  "#FFD54F",
+  "#FF9100",
+  "#FF5252",
+];
+
+function quadBezier(t: number, p0: number, p1: number, p2: number) {
+  const u = 1 - t;
+  return u * u * p0 + 2 * u * t * p1 + t * t * p2;
+}
 
 function ScoreGlyph({ points }: { points: number }) {
   const text = `+${points}`;
 
   return (
-    <div className="relative" style={{ fontFamily: "var(--font-planc), serif", fontWeight: 600 }}>
-      {LAYER_COLORS.map((color, i) => (
+    <div
+      className="relative"
+      style={{ fontFamily: "var(--font-planc), serif", fontWeight: 600 }}
+    >
+      {GLYPH_LAYERS.map((color, i) => (
         <span
           key={color}
           aria-hidden
@@ -30,8 +52,8 @@ function ScoreGlyph({ points }: { points: number }) {
             fontSize: SCORE_FONT_SIZE,
             color,
             WebkitTextStroke: "1.5px #1A1A1A",
-            transform: `translate(${i * 5}px, ${i * 5}px)`,
-            opacity: 1 - i * 0.12,
+            transform: `translate(${4 + i * 5}px, ${4 + i * 5}px)`,
+            opacity: 1 - i * 0.1,
           }}
         >
           {text}
@@ -41,7 +63,7 @@ function ScoreGlyph({ points }: { points: number }) {
         className="relative whitespace-nowrap"
         style={{
           fontSize: SCORE_FONT_SIZE,
-          color: "#00E5FF",
+          color: GLYPH_MAIN,
           WebkitTextStroke: "1.5px #1A1A1A",
         }}
       >
@@ -55,11 +77,13 @@ export default function ScoreFlyPopup({
   points,
   anchorRef,
   onComplete,
+  targetId = "gs-score-digits",
+  label: labelOverride,
 }: ScoreFlyPopupProps) {
-  const rootRef = useRef<HTMLDivElement>(null);
   const mainRef = useRef<HTMLDivElement>(null);
+  const ghostRefs = useRef<(HTMLDivElement | null)[]>([]);
   const onCompleteRef = useRef(onComplete);
-  const label = getScoreLabel(points);
+  const label = labelOverride ?? getScoreLabel(points);
   const text = `+${points}`;
 
   useEffect(() => {
@@ -67,31 +91,40 @@ export default function ScoreFlyPopup({
   }, [onComplete]);
 
   useEffect(() => {
-    const root = rootRef.current;
     const main = mainRef.current;
     const anchor = anchorRef.current;
-    if (!root || !main || !anchor) return;
+    if (!main || !anchor) return;
 
     const anchorRect = anchor.getBoundingClientRect();
-    const ghosts = root.querySelectorAll<HTMLElement>("[data-ghost]");
-
     const originX = anchorRect.left + anchorRect.width / 2;
     const originY = anchorRect.top + anchorRect.height / 2;
 
-    gsap.set(root, {
-      x: originX,
-      y: originY,
-      xPercent: -50,
-      yPercent: -50,
-    });
-    gsap.set(main, { scale: 0, opacity: 0, rotation: -4 });
-    gsap.set(ghosts, { opacity: 0, x: 0, y: 0, rotation: 0, scale: 1 });
-
     const finish = () => onCompleteRef.current?.();
+    const target = document.getElementById(targetId);
 
-    const target = document.getElementById("gs-score-digits");
+    const setCenter = (el: HTMLElement, x: number, y: number) => {
+      gsap.set(el, { x, y, xPercent: -50, yPercent: -50 });
+    };
+
+    setCenter(main, originX, originY);
+    gsap.set(main, { scale: 0, opacity: 0, rotation: -6 });
+
+    ghostRefs.current.forEach((ghost, i) => {
+      if (!ghost) return;
+      setCenter(ghost, originX, originY);
+      gsap.set(ghost, {
+        scale: 0.88 - i * 0.06,
+        opacity: 0,
+        rotation: -4 + i * 3,
+        color: TRAIL_COLORS[i % TRAIL_COLORS.length],
+      });
+    });
+
     if (!target) {
-      const fallback = gsap.delayedCall(SCORE_HOLD_DURATION + SCORE_FLY_DURATION + 0.3, finish);
+      const fallback = gsap.delayedCall(
+        SCORE_HOLD_DURATION + SCORE_FLY_DURATION + 0.3,
+        finish,
+      );
       return () => {
         fallback.kill();
       };
@@ -102,8 +135,57 @@ export default function ScoreFlyPopup({
     const targetY = targetRect.top + targetRect.height / 2;
 
     const deltaX = targetX - originX;
-    const arcX = originX + deltaX * 0.22;
-    const arcY = originY - SCORE_ARC_LIFT;
+    const deltaY = targetY - originY;
+    const controlX = originX + deltaX * 0.52 + Math.min(80, deltaX * 0.08);
+    const controlY = originY + deltaY * 0.22 - SCORE_ARC_LIFT;
+
+    const flyAlongArc = (
+      el: HTMLElement,
+      delay: number,
+      duration: number,
+      fromScale: number,
+      toScale: number,
+      fromOpacity: number,
+      toOpacity: number,
+      fromRotation: number,
+      toRotation: number,
+      timeline: gsap.core.Timeline,
+      position: string,
+    ) => {
+      const proxy = { t: 0 };
+      timeline.fromTo(
+        proxy,
+        { t: 0 },
+        {
+          t: 1,
+          duration,
+          delay,
+          ease: "power1.inOut",
+          onUpdate: () => {
+            setCenter(
+              el,
+              quadBezier(proxy.t, originX, controlX, targetX),
+              quadBezier(proxy.t, originY, controlY, targetY),
+            );
+          },
+        },
+        position,
+      );
+
+      timeline.fromTo(
+        el,
+        { scale: fromScale, opacity: fromOpacity, rotation: fromRotation },
+        {
+          scale: toScale,
+          opacity: toOpacity,
+          rotation: toRotation,
+          duration,
+          delay,
+          ease: "power1.inOut",
+        },
+        position,
+      );
+    };
 
     const tl = gsap.timeline({ onComplete: finish });
 
@@ -111,112 +193,62 @@ export default function ScoreFlyPopup({
       scale: 1,
       opacity: 1,
       rotation: 0,
-      duration: 0.35,
+      duration: 0.38,
       ease: "back.out(2)",
     });
 
     tl.to({}, { duration: SCORE_HOLD_DURATION });
 
-    const flyPhase1 = SCORE_FLY_DURATION * 0.45;
-    const flyPhase2 = SCORE_FLY_DURATION * 0.55;
+    flyAlongArc(main, 0, SCORE_FLY_DURATION, 1, 0.16, 1, 0, 0, 18, tl, "fly");
 
-    tl.to(
-      root,
-      {
-        x: arcX,
-        y: arcY,
-        duration: flyPhase1,
-        ease: "power1.out",
-      },
-      "fly",
-    );
+    ghostRefs.current.forEach((ghost, i) => {
+      if (!ghost) return;
+      const lag = 0.1 + i * 0.09;
+      const trailDuration = SCORE_FLY_DURATION * (0.92 - i * 0.04);
 
-    tl.to(
-      main,
-      {
-        rotation: 12,
-        scale: 0.55,
-        duration: flyPhase1,
-        ease: "power1.out",
-      },
-      "fly",
-    );
-
-    tl.to(
-      root,
-      {
-        x: targetX,
-        y: targetY,
-        duration: flyPhase2,
-        ease: "power2.inOut",
-      },
-      `fly+=${flyPhase1 * 0.55}`,
-    );
-
-    tl.to(
-      main,
-      {
-        rotation: 24,
-        scale: 0.2,
-        duration: flyPhase2,
-        ease: "power2.inOut",
-      },
-      `fly+=${flyPhase1 * 0.55}`,
-    );
-
-    const trailColors = ["#69F0AE", "#448AFF", "#7C4DFF", "#FF4081", "#FF5252", "#FF9100"];
-    ghosts.forEach((ghost, i) => {
-      const lag = i * 0.07;
-      const trailScale = 0.92 - i * 0.06;
-      const ghostArcX = originX + (arcX - originX) * trailScale;
-      const ghostArcY = originY + (arcY - originY) * trailScale - i * 8;
-      const ghostTargetX = originX + (targetX - originX) * trailScale;
-      const ghostTargetY = originY + (targetY - originY) * trailScale;
-
-      gsap.set(ghost, {
-        opacity: 0.55 - i * 0.07,
-        color: trailColors[i % trailColors.length],
-      });
-
-      tl.to(
+      flyAlongArc(
         ghost,
-        {
-          x: ghostArcX - originX,
-          y: ghostArcY - originY,
-          rotation: 8 + i * 6,
-          scale: 0.5 - i * 0.04,
-          duration: flyPhase1,
-          ease: "power1.out",
-        },
-        `fly+=${lag}`,
-      );
-
-      tl.to(
-        ghost,
-        {
-          x: ghostTargetX - originX,
-          y: ghostTargetY - originY,
-          rotation: 20 + i * 5,
-          scale: 0.18,
-          opacity: 0,
-          duration: flyPhase2,
-          ease: "power2.inOut",
-        },
-        `fly+=${flyPhase1 * 0.55 + lag}`,
+        lag,
+        trailDuration,
+        0.82 - i * 0.07,
+        0.12,
+        0.72 - i * 0.09,
+        0,
+        -2 + i * 4,
+        14 + i * 5,
+        tl,
+        "fly",
       );
     });
-
-    tl.to(main, { opacity: 0, duration: 0.12 }, "-=0.08");
 
     return () => {
       tl.kill();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- tek seferlik animasyon
-  }, [points]);
+  }, [points, targetId]);
 
   return (
-    <div ref={rootRef} className="fixed left-0 top-0 z-40 pointer-events-none">
-      <div ref={mainRef} className="relative">
+    <div className="fixed inset-0 z-40 pointer-events-none overflow-visible">
+      {Array.from({ length: 6 }).map((_, i) => (
+        <div
+          key={i}
+          ref={(el) => {
+            ghostRefs.current[i] = el;
+          }}
+          className="absolute left-0 top-0 whitespace-nowrap pointer-events-none"
+          style={{
+            fontFamily: "var(--font-planc), serif",
+            fontWeight: 600,
+            fontSize: SCORE_FONT_SIZE,
+            WebkitTextStroke: "1.5px #1A1A1A",
+            opacity: 0,
+          }}
+        >
+          {text}
+        </div>
+      ))}
+
+      <div ref={mainRef} className="absolute left-0 top-0">
         {label && (
           <div
             className="absolute border border-[#1A1A1A] px-3 py-1"
@@ -236,23 +268,6 @@ export default function ScoreFlyPopup({
         )}
         <ScoreGlyph points={points} />
       </div>
-
-      {Array.from({ length: 6 }).map((_, i) => (
-        <div
-          key={i}
-          data-ghost
-          className="absolute left-0 top-0 whitespace-nowrap pointer-events-none"
-          style={{
-            fontFamily: "var(--font-planc), serif",
-            fontWeight: 600,
-            fontSize: SCORE_FONT_SIZE,
-            WebkitTextStroke: "1.5px #1A1A1A",
-            opacity: 0,
-          }}
-        >
-          {text}
-        </div>
-      ))}
     </div>
   );
 }

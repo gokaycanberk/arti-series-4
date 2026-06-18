@@ -26,13 +26,23 @@ export const GAMES = [
     order: 2,
   }),
   defineGame({
+    id: "retina-check",
+    name: "RETINA CHECK",
+    category: "structure",
+    description:
+      "Pick the shape that's 2px bigger and prove your eyes are unnecessarily calibrated for absolutely no reason.",
+    duration: 30,
+    difficulty: "hard",
+    order: 3,
+  }),
+  defineGame({
     id: "glyph-guess",
     name: "Glyph Guess",
     category: "typography",
     description: "Gizli karakteri tek ipucuyla tahmin et.",
     duration: 25,
     difficulty: "medium",
-    order: 3,
+    order: 4,
   }),
   defineGame({
     id: "rgb-guess",
@@ -41,7 +51,7 @@ export const GAMES = [
     description: "Panele yaklaşarak doğru RGB bileşimini bul.",
     duration: 30,
     difficulty: "hard",
-    order: 4,
+    order: 5,
   }),
   defineGame({
     id: "gradient-angle",
@@ -50,7 +60,7 @@ export const GAMES = [
     description: "Açıyı görsel olarak hizala, mükemmel geçişi yakala.",
     duration: 30,
     difficulty: "medium",
-    order: 5,
+    order: 6,
   }),
   defineGame({
     id: "color-split",
@@ -59,7 +69,7 @@ export const GAMES = [
     description: "Alanı doğru yüzdelik bölgelerle ayır.",
     duration: 28,
     difficulty: "hard",
-    order: 6,
+    order: 7,
   }),
   defineGame({
     id: "color-mix",
@@ -68,7 +78,7 @@ export const GAMES = [
     description: "İki pigmentin karışımını ezberinden üret.",
     duration: 30,
     difficulty: "medium",
-    order: 7,
+    order: 8,
   }),
   defineGame({
     id: "2px-difference",
@@ -78,7 +88,7 @@ export const GAMES = [
       "İki özdeş şekilden boyutu tam 2 px daha küçük olanı seç. Süre bitene kadar en yüksek doğruluk skorunu yakalamaya çalış.",
     duration: 35,
     difficulty: "hard",
-    order: 8,
+    order: 9,
   }),
   defineGame({
     id: "untitled-project",
@@ -87,7 +97,7 @@ export const GAMES = [
     description: "Boş tuvalde düzeni hissederek oluştur.",
     duration: 30,
     difficulty: "easy",
-    order: 9,
+    order: 10,
   }),
   defineGame({
     id: "widow-hunter",
@@ -96,7 +106,7 @@ export const GAMES = [
     description: "Dökümdeki yalnız satırları avla, tipografiyi koru.",
     duration: 32,
     difficulty: "hard",
-    order: 10,
+    order: 11,
   }),
 ].sort((a, b) => a.order - b.order);
 

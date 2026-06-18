@@ -1,15 +1,40 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import ColorPicker from "@/components/ColorPicker";
 import { GameShell } from "@/components/GameShell";
 import type { GameShellChildState } from "@/components/GameShell";
 import OpticalPanic from "@/components/games/OpticalPanic";
+import RetinaCheck from "@/components/games/RetinaCheck";
 
 type Phase = "picking" | "transitioning" | "game";
 
+const MARATHON_GAMES = [
+  {
+    resetKey: "optical-panic",
+    name: "OPTICAL PANIC",
+    duration: 30,
+    Component: OpticalPanic,
+  },
+  {
+    resetKey: "retina-check",
+    name: "RETINA CHECK",
+    duration: 30,
+    Component: RetinaCheck,
+  },
+] as const;
+
 export default function OnboardingPage() {
   const [phase, setPhase] = useState<Phase>("picking");
+  const [gameIndex, setGameIndex] = useState(0);
+  const [marathonScore, setMarathonScore] = useState(0);
+
+  const activeGame = MARATHON_GAMES[gameIndex] ?? MARATHON_GAMES[0]!;
+  const ActiveComponent = activeGame.Component;
+
+  const handleScoreAdd = useCallback((points: number) => {
+    setMarathonScore((prev) => prev + points);
+  }, []);
 
   const handleTransitionStart = () => {
     setPhase("transitioning");
@@ -19,16 +44,20 @@ export default function OnboardingPage() {
     setPhase("game");
   };
 
+  const handleGameComplete = () => {
+    if (gameIndex < MARATHON_GAMES.length - 1) {
+      setGameIndex((prev) => prev + 1);
+    }
+  };
+
   return (
     <div className="fixed inset-0 h-screen w-screen overflow-hidden bg-[#E8E8E8]">
-      {/* Flash overlay */}
       <div
         id="flash-overlay"
         className="fixed inset-0 z-[9999] pointer-events-none"
         style={{ backgroundColor: "white", opacity: 0 }}
       />
 
-      {/* Face reveal */}
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         id="face-reveal"
@@ -56,9 +85,13 @@ export default function OnboardingPage() {
 
       {phase === "game" && (
         <GameShell
-          resetKey="optical-panic"
-          gameName="OPTICAL PANIC"
-          duration={30}
+          key="marathon"
+          resetKey={`${activeGame.resetKey}-${gameIndex + 1}`}
+          gameName={activeGame.name}
+          duration={activeGame.duration}
+          initialRound={gameIndex + 1}
+          initialScore={marathonScore}
+          onScoreAdd={handleScoreAdd}
         >
           {({
             isPlaying,
@@ -69,12 +102,15 @@ export default function OnboardingPage() {
             round,
             timeLeft,
           }: GameShellChildState) => (
-            <OpticalPanic
+            <ActiveComponent
+              key={activeGame.resetKey}
+              gameKey={activeGame.resetKey}
               isPlaying={isPlaying}
               shellReady={shellReady}
               onAnswer={onAnswer}
               onGameStart={startGame}
               addRoundScore={addRoundScore}
+              onGameComplete={handleGameComplete}
               round={round}
               timeLeft={timeLeft}
             />

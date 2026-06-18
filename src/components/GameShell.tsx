@@ -1,7 +1,7 @@
 "use client";
 
 import gsap from "gsap";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useGameStore } from "@/stores/gameStore";
 
 export type GameShellChildState = {
@@ -23,6 +23,11 @@ interface GameShellProps {
   gameName?: string;
   description?: string;
   duration?: number;
+  /** Maraton sırası — ilerleme çubuğu bu adımdan başlar */
+  initialRound?: number;
+  /** Önceki oyunlardan biriken toplam skor */
+  initialScore?: number;
+  onScoreAdd?: (points: number) => void;
   children?: (state: GameShellChildState) => React.ReactElement;
 }
 
@@ -30,15 +35,23 @@ export function GameShell({
   resetKey,
   gameName,
   duration = 30,
+  initialRound = 1,
+  initialScore = 0,
+  onScoreAdd,
   children,
 }: GameShellProps) {
   const nickname = useGameStore((state) => state.nickname);
-  const [score, setScore] = useState(0);
-  const [round, setRound] = useState(1);
+  const [score, setScore] = useState(initialScore);
+  const [round, setRound] = useState(initialRound);
   const [timeLeft, setTimeLeft] = useState(duration);
   const [isPlaying, setIsPlaying] = useState(false);
   const [shellReady, setShellReady] = useState(false);
   const [, setLiveScoreGetter] = useState<(() => number) | null>(null);
+  const shellEnteredRef = useRef(false);
+  const initialScoreRef = useRef(initialScore);
+  useEffect(() => {
+    initialScoreRef.current = initialScore;
+  });
   const totalRounds = 6;
 
   // Timer
@@ -50,24 +63,29 @@ export function GameShell({
     return () => clearInterval(interval);
   }, [timeLeft, isPlaying]);
 
-  // Reset
+  // Yeni oyun — skor maratondan gelir; shell girişi yalnızca ilk seferde oynar
+  const marathonRound = initialRound;
   useEffect(() => {
-    queueMicrotask(() => {
-      setScore(0);
-      setRound(1);
-      setTimeLeft(duration);
-      setIsPlaying(false);
-      setShellReady(false);
-    });
-  }, [resetKey, duration]);
+    setScore(initialScoreRef.current);
+    setRound(marathonRound);
+    setTimeLeft(duration);
+    setIsPlaying(false);
+    if (shellEnteredRef.current) {
+      setShellReady(true);
+    }
+  }, [resetKey, duration, marathonRound]);
 
   const onAnswer = useCallback((correct: boolean) => {
     setRound((prev) => prev + 1);
   }, []);
 
-  const addRoundScore = useCallback((points: number) => {
-    setScore((prev) => prev + points);
-  }, []);
+  const addRoundScore = useCallback(
+    (points: number) => {
+      setScore((prev) => prev + points);
+      onScoreAdd?.(points);
+    },
+    [onScoreAdd],
+  );
 
   const endGame = useCallback(() => {
     setIsPlaying(false);
@@ -82,6 +100,7 @@ export function GameShell({
     const tl = gsap.timeline({
       defaults: { ease: "back.out(1.4)" },
       onComplete: () => {
+        shellEnteredRef.current = true;
         setShellReady(true);
       },
     });

@@ -12,6 +12,8 @@ interface ScoreFlyPopupProps {
   targetId?: string;
   /** getScoreLabel yerine özel etiket */
   label?: string | null;
+  /** false ise puan yan tarafta kalır, üst skora uçmaz */
+  flyToScore?: boolean;
 }
 
 const SCORE_FONT_SIZE = 200;
@@ -79,6 +81,7 @@ export default function ScoreFlyPopup({
   onComplete,
   targetId = "gs-score-digits",
   label: labelOverride,
+  flyToScore = true,
 }: ScoreFlyPopupProps) {
   const mainRef = useRef<HTMLDivElement>(null);
   const ghostRefs = useRef<(HTMLDivElement | null)[]>([]);
@@ -120,13 +123,28 @@ export default function ScoreFlyPopup({
       });
     });
 
-    if (!target) {
-      const fallback = gsap.delayedCall(
-        SCORE_HOLD_DURATION + SCORE_FLY_DURATION + 0.3,
-        finish,
-      );
+    const tl = gsap.timeline({ onComplete: finish });
+
+    tl.to(main, {
+      scale: 1,
+      opacity: 1,
+      rotation: 0,
+      duration: 0.38,
+      ease: "back.out(2)",
+    });
+
+    tl.to({}, { duration: SCORE_HOLD_DURATION });
+
+    if (!flyToScore) {
       return () => {
-        fallback.kill();
+        tl.kill();
+      };
+    }
+
+    if (!target) {
+      tl.to({}, { duration: SCORE_FLY_DURATION + 0.3 });
+      return () => {
+        tl.kill();
       };
     }
 
@@ -187,18 +205,6 @@ export default function ScoreFlyPopup({
       );
     };
 
-    const tl = gsap.timeline({ onComplete: finish });
-
-    tl.to(main, {
-      scale: 1,
-      opacity: 1,
-      rotation: 0,
-      duration: 0.38,
-      ease: "back.out(2)",
-    });
-
-    tl.to({}, { duration: SCORE_HOLD_DURATION });
-
     flyAlongArc(main, 0, SCORE_FLY_DURATION, 1, 0.16, 1, 0, 0, 18, tl, "fly");
 
     ghostRefs.current.forEach((ghost, i) => {
@@ -225,7 +231,7 @@ export default function ScoreFlyPopup({
       tl.kill();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- tek seferlik animasyon
-  }, [points, targetId]);
+  }, [points, targetId, flyToScore]);
 
   return (
     <div className="fixed inset-0 z-40 pointer-events-none overflow-visible">

@@ -249,8 +249,10 @@ export default function OpticalPanic({
   useEffect(() => {
     if (!shellReady) return;
 
-    prepareRound();
-    setPhase("intro");
+    queueMicrotask(() => {
+      prepareRound();
+      setPhase("intro");
+    });
 
     const card = introCardRef.current;
     const descBox = descBoxRef.current;

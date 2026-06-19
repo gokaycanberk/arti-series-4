@@ -6,6 +6,7 @@ import { GameShell } from "@/components/GameShell";
 import type { GameShellChildState } from "@/components/GameShell";
 import OpticalPanic from "@/components/games/OpticalPanic";
 import RetinaCheck from "@/components/games/RetinaCheck";
+import BezierBrain from "@/components/games/BezierBrain";
 
 type Phase = "picking" | "transitioning" | "game";
 
@@ -21,6 +22,12 @@ const MARATHON_GAMES = [
     name: "RETINA CHECK",
     duration: 30,
     Component: RetinaCheck,
+  },
+  {
+    resetKey: "bezier-brain",
+    name: "BEZIER BRAIN",
+    duration: 60,
+    Component: BezierBrain,
   },
 ] as const;
 

@@ -184,12 +184,7 @@ export default function RetinaCheck({
     });
   }, [getBoardMetrics]);
 
-  const prepareRound = useCallback(() => {
-    setBiggerSide(Math.random() < 0.5 ? "left" : "right");
-    pickedRef.current = false;
-    setFlyScore(null);
-    setPhase("waiting");
-
+  const resetShapeTransforms = useCallback(() => {
     if (pairRef.current) {
       gsap.set(pairRef.current, { scale: 1, x: 0, y: 0 });
     }
@@ -311,8 +306,26 @@ export default function RetinaCheck({
   useEffect(() => {
     if (!shellReady) return;
 
-    prepareRound();
-    setPhase("intro");
+    let cancelled = false;
+    const nextSide: Side = Math.random() < 0.5 ? "left" : "right";
+
+    queueMicrotask(() => {
+      if (cancelled) return;
+      pickedRef.current = false;
+      setBiggerSide(nextSide);
+      setFlyScore(null);
+      setPhase("intro");
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [shellReady, gameKey]);
+
+  useEffect(() => {
+    if (!shellReady || phase !== "intro") return;
+
+    resetShapeTransforms();
 
     const card = introCardRef.current;
     const descBox = descBoxRef.current;
@@ -352,9 +365,7 @@ export default function RetinaCheck({
     return () => {
       tl.kill();
     };
-    // gameKey: maraton geçişinde intro yeniden başlar; callback ref ile deps sadeleşir
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [shellReady, gameKey]);
+  }, [shellReady, gameKey, phase, resetShapeTransforms]);
 
   useLayoutEffect(() => {
     if (phase !== "playing") return;

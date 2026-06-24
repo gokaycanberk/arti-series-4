@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import gsap from "gsap";
 import ArrowKeycap, { type ArrowKeycapHandle } from "@/components/ArrowKeycap";
+import { GameDescBox, DESC_BOX_LEFT, DESC_BOX_TOP } from "@/components/GameDescBox";
 import ScoreFlyPopup from "@/components/games/ScoreFlyPopup";
 import { scoreFromDistance } from "@/components/games/scoreUtils";
 
@@ -526,46 +527,15 @@ export default function OpticalPanic({
         </div>
       </div>
 
-      {/* SOL PANEL — avatar altı */}
-      <div
-        className="absolute top-0 left-0 z-10 flex flex-col"
-        style={{ paddingLeft: "24px", gap: "12px" }}
-      >
-        <div
-          ref={descBoxRef}
-          style={{
-            opacity: 0,
-            border: "1.5px solid #1A1A1A",
-            backgroundColor: "#FFFFFF",
-            padding: "14px 16px",
-            width: "190px",
-          }}
-        >
-          <h3
-            style={{
-              fontFamily: "var(--font-planc), serif",
-              fontWeight: 700,
-              fontSize: "13px",
-              color: "#1A1A1A",
-              marginBottom: "6px",
-            }}
-          >
-            OPTICAL PANIC
-          </h3>
-          <p
-            style={{
-              fontFamily: "var(--font-planc), serif",
-              fontWeight: 450,
-              fontSize: "10px",
-              lineHeight: "14px",
-              color: "#1A1A1A",
-            }}
-          >
-            Use the arrow keys to guide the falling letter into the right spot
-            then press done and let&apos;s see how type nerd you really are.
-          </p>
-        </div>
+      <GameDescBox ref={descBoxRef} title="OPTICAL PANIC">
+        Use the arrow keys to guide the falling letter into the right spot then
+        press done and let&apos;s see how type nerd you really are.
+      </GameDescBox>
 
+      <div
+        className="absolute z-10 flex flex-col"
+        style={{ left: DESC_BOX_LEFT, top: DESC_BOX_TOP + 108, gap: 12 }}
+      >
         <div ref={controlsRef} style={{ opacity: 0, display: "flex", gap: "8px" }}>
           <ArrowKeycap
             ref={leftKeyRef}

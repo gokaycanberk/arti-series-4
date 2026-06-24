@@ -2,6 +2,24 @@
 
 import gsap from "gsap";
 import { useEffect, useState, useCallback, useRef } from "react";
+import { MarathonProgressBar } from "@/components/MarathonProgressBar";
+import {
+  SHELL_BAR_INSET_X,
+  SHELL_HEADER_HEIGHT,
+  SHELL_LOGO_HEIGHT,
+  SHELL_LOGO_TOP,
+  SHELL_LOGO_WIDTH,
+  SHELL_MENU_BAR_GAP,
+  SHELL_MENU_BAR_HEIGHT,
+  SHELL_MENU_TOP,
+  SHELL_MENU_WIDTH,
+  SHELL_PANEL_INSET_X,
+  SHELL_PANEL_TOP,
+  SHELL_PROGRESS_WRAP_TOP,
+  SHELL_SCORE_PANEL_GAP,
+  SHELL_SCORE_PANEL_WIDTH,
+} from "@/lib/gameShellLayout";
+import { MARATHON_TOTAL_STEPS } from "@/lib/marathon";
 import { useGameStore } from "@/stores/gameStore";
 
 export type GameShellChildState = {
@@ -23,7 +41,9 @@ interface GameShellProps {
   gameName?: string;
   description?: string;
   duration?: number;
-  /** Maraton sırası — ilerleme çubuğu bu adımdan başlar */
+  /** Maraton ilerleme adımı (0 … MARATHON_TOTAL_STEPS) */
+  marathonStep?: number;
+  /** @deprecated Maraton için marathonStep kullanın */
   initialRound?: number;
   /** Önceki oyunlardan biriken toplam skor */
   initialScore?: number;
@@ -35,6 +55,7 @@ export function GameShell({
   resetKey,
   gameName,
   duration = 30,
+  marathonStep = 0,
   initialRound = 1,
   initialScore = 0,
   onScoreAdd,
@@ -52,7 +73,6 @@ export function GameShell({
   useEffect(() => {
     initialScoreRef.current = initialScore;
   });
-  const totalRounds = 6;
 
   // Timer
   useEffect(() => {
@@ -64,16 +84,15 @@ export function GameShell({
   }, [timeLeft, isPlaying]);
 
   // Yeni oyun — skor maratondan gelir; shell girişi yalnızca ilk seferde oynar
-  const marathonRound = initialRound;
   useEffect(() => {
     setScore(initialScoreRef.current);
-    setRound(marathonRound);
+    setRound(initialRound);
     setTimeLeft(duration);
     setIsPlaying(false);
     if (shellEnteredRef.current) {
       setShellReady(true);
     }
-  }, [resetKey, duration, marathonRound]);
+  }, [resetKey, duration, initialRound]);
 
   const onAnswer = useCallback((correct: boolean) => {
     setRound((prev) => prev + 1);
@@ -105,7 +124,7 @@ export function GameShell({
       },
     });
     tl.fromTo(
-      "#gs-navbar",
+      "#gs-header",
       { y: -50, opacity: 0 },
       { y: 0, opacity: 1, duration: 0.6 },
       0,
@@ -138,120 +157,103 @@ export function GameShell({
     return `${m}:${s}`;
   };
 
-  const panelWidth = 180;
+  const panelWidth = SHELL_SCORE_PANEL_WIDTH;
+  const scoreDigits = 7;
+  const cellWidth = Math.floor(panelWidth / scoreDigits);
 
   return (
     <div className="absolute inset-0 flex flex-col bg-[#E8E8E8]">
-      {/* NAVBAR */}
-      <div id="gs-navbar" style={{ opacity: 0 }}>
-        <div className="flex items-center justify-between px-6 py-4">
-          <button
-            className="flex flex-col gap-[5px] cursor-pointer"
-            aria-label="Menu"
-          >
-            <span
-              className="block rounded-sm"
-              style={{
-                backgroundColor: "#1A1A1A",
-                height: "4px",
-                width: "32px",
-              }}
-            />
-            <span
-              className="block rounded-sm"
-              style={{
-                backgroundColor: "#1A1A1A",
-                height: "4px",
-                width: "32px",
-              }}
-            />
-          </button>
-
-          <div className="absolute left-1/2 -translate-x-1/2">
-            <span
-              className="text-[14px] text-[#fff] px-5 py-2 rounded"
-              style={{
-                backgroundColor: "rgba(0,0,0,0.35)",
-                fontFamily: "var(--font-planc), serif",
-              }}
-            >
-              LOGO GELECEK
-            </span>
-          </div>
-
-          <div style={{ width: 32 }} />
-        </div>
-      </div>
-
-      {/* PROGRESS BAR */}
+      {/* HEADER — Figma: menu @68px, logo, progress @128px */}
       <div
-        id="gs-progress-row"
-        className="flex items-center gap-3 px-6 mt-4 flex-shrink-0"
-        style={{ opacity: 0 }}
+        id="gs-header"
+        className="relative flex-shrink-0"
+        style={{ height: SHELL_HEADER_HEIGHT, opacity: 0 }}
       >
-        <div className="flex-shrink-0">
-          <img
-            src="/Avatar_Set/face/face.png"
-            alt="avatar"
-            className="rounded-full border border-[#1A1A1A]"
-            style={{ width: "32px", height: "32px" }}
+        <button
+          type="button"
+          className="absolute cursor-pointer border-0 bg-transparent p-0"
+          style={{
+            top: SHELL_MENU_TOP,
+            left: SHELL_PANEL_INSET_X,
+          }}
+          aria-label="Menu"
+        >
+          <span
+            className="block"
+            style={{
+              width: SHELL_MENU_WIDTH,
+              height: SHELL_MENU_BAR_HEIGHT,
+              backgroundColor: "#1A1A1A",
+            }}
           />
+          <span
+            className="block"
+            style={{
+              width: SHELL_MENU_WIDTH,
+              height: SHELL_MENU_BAR_HEIGHT,
+              marginTop: SHELL_MENU_BAR_GAP,
+              backgroundColor: "#1A1A1A",
+            }}
+          />
+        </button>
+
+        <div
+          className="absolute left-1/2 flex -translate-x-1/2 items-center justify-center"
+          style={{
+            top: SHELL_LOGO_TOP,
+            width: SHELL_LOGO_WIDTH,
+            height: SHELL_LOGO_HEIGHT,
+            backgroundColor: "#C4C4C4",
+          }}
+        >
+          <span
+            className="text-center text-white"
+            style={{
+              fontFamily: "var(--font-planc), serif",
+              fontSize: 27,
+              lineHeight: "normal",
+            }}
+          >
+            LOGO GELECEK
+          </span>
         </div>
 
         <div
-          className="flex-1 min-w-0 relative"
+          id="gs-progress-row"
+          className="absolute left-0 right-0"
           style={{
-            height: "6px",
-            backgroundColor: "#D4D4D4",
-            borderRadius: "3px",
+            top: SHELL_PROGRESS_WRAP_TOP,
+            paddingLeft: SHELL_BAR_INSET_X,
+            paddingRight: SHELL_BAR_INSET_X,
           }}
         >
-          <div
-            style={{
-              position: "absolute",
-              left: 0,
-              top: 0,
-              bottom: 0,
-              width: `${((round - 1) / totalRounds) * 100}%`,
-              backgroundColor: "#1A1A1A",
-              borderRadius: "3px",
-              transition: "width 0.5s ease",
-            }}
-          />
-          <div className="absolute inset-0 flex items-center justify-between pointer-events-none">
-            {Array.from({ length: totalRounds + 1 }).map((_, i) => (
-              <div
-                key={i}
-                style={{
-                  width: "1.5px",
-                  height: "16px",
-                  backgroundColor: "#1A1A1A",
-                  marginTop: "-5px",
-                }}
-              />
-            ))}
-          </div>
+          <MarathonProgressBar step={marathonStep} />
         </div>
       </div>
 
       {/* GAME AREA */}
       <div
         id="gs-game-area"
-        className="relative flex-1 min-h-0 mt-2"
+        className="relative min-h-0 flex-1"
         style={{ opacity: 0 }}
       >
-        {/* Sağ göstergeler — sol kutu ile simetrik, barın altında */}
+        {/* Sağ skor paneli — bar altında, Figma hizası */}
         <div
           id="gs-right-panel"
-          className="absolute top-0 right-6 z-10 flex flex-col items-end gap-[5px]"
-          style={{ opacity: 0 }}
+          className="absolute z-10 flex flex-col items-end"
+          style={{
+            opacity: 0,
+            top: SHELL_PANEL_TOP,
+            right: SHELL_PANEL_INSET_X,
+            gap: SHELL_SCORE_PANEL_GAP,
+          }}
         >
           <div
             className="flex items-center justify-center border border-[#1A1A1A]"
             style={{
-              backgroundColor: nickname || "#F7BEA0",
+              backgroundColor: "#F7BEA0",
               width: `${panelWidth}px`,
-              height: "32px",
+              height: "34px",
             }}
           >
             <span
@@ -278,16 +280,17 @@ export function GameShell({
 
           <div id="gs-score-digits" className="flex" style={{ width: `${panelWidth}px` }}>
             {String(score)
-              .padStart(6, "0")
+              .padStart(scoreDigits, "0")
               .split("")
               .map((digit, i) => (
                 <div
                   key={i}
                   className="flex items-center justify-center border border-[#1A1A1A]"
                   style={{
-                    flex: 1,
-                    height: "32px",
-                    backgroundColor: "#FFFFFF",
+                    width: `${cellWidth}px`,
+                    height: "34px",
+                    marginLeft: i > 0 ? -1 : 0,
+                    backgroundColor: "#E5E5E5",
                     color: "#1A1A1A",
                     fontFamily: "var(--font-planc), serif",
                     fontSize: "13px",
@@ -303,7 +306,7 @@ export function GameShell({
             className="flex items-center justify-center border border-[#1A1A1A]"
             style={{
               width: `${panelWidth}px`,
-              height: "32px",
+              height: "34px",
               backgroundColor: "#FFFFFF",
               fontFamily: "var(--font-planc), serif",
               fontSize: "13px",
@@ -320,7 +323,7 @@ export function GameShell({
             {children({
               score,
               round,
-              totalRounds,
+              totalRounds: MARATHON_TOTAL_STEPS,
               timeLeft,
               isPlaying,
               shellReady,
@@ -338,7 +341,7 @@ export function GameShell({
       </div>
 
       {/* Footer */}
-      <div className="absolute bottom-4 right-6 flex flex-col items-end">
+      <div className="absolute bottom-4 flex flex-col items-end" style={{ right: SHELL_PANEL_INSET_X }}>
         <span className="text-[9px] text-[#999]">created by</span>
         <span
           className="text-[11px] text-[#666]"

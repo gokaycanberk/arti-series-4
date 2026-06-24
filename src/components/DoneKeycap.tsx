@@ -4,7 +4,6 @@ import {
   forwardRef,
   useCallback,
   useEffect,
-  useId,
   useImperativeHandle,
   useRef,
 } from "react";
@@ -20,72 +19,34 @@ interface DoneKeycapProps {
   disabled?: boolean;
 }
 
-const W = 112;
-const H = 36;
-const DX = 5;
-const DY = 5;
-const OX = 8;
-const OY = 8;
-const BG = "#e5e5e5";
-const INK = "#1a1a1a";
+/** Figma Done butonu — 166×66 */
+const SVG_W = 166;
+const SVG_H = 66;
+const FACE_CX = 80.5;
+const FACE_CY = 30.5;
+const PRESS_OFFSET = 5;
 
 const DoneKeycap = forwardRef<DoneKeycapHandle, DoneKeycapProps>(
   function DoneKeycap({ onPress, className = "", disabled = false }, ref) {
-    const uid = useId().replace(/:/g, "");
-    const svgRef = useRef<SVGSVGElement>(null);
+    const faceRef = useRef<SVGGElement>(null);
+    const labelRef = useRef<SVGTextElement>(null);
     const progressRef = useRef(0);
     const targetRef = useRef(0);
     const rafRef = useRef<number | null>(null);
 
-    const svgW = W + DX + OX * 2;
-    const svgH = H + DY + OY * 2;
+    const draw = useCallback((p: number) => {
+      const face = faceRef.current;
+      const label = labelRef.current;
+      if (!face) return;
 
-    const idRight = `dk-right-${uid}`;
-    const idBottom = `dk-bottom-${uid}`;
-    const idTop = `dk-top-${uid}`;
-    const idOutline = `dk-outline-${uid}`;
-    const idLabel = `dk-label-${uid}`;
+      const ox = PRESS_OFFSET * p;
+      const oy = PRESS_OFFSET * p;
+      face.setAttribute("transform", `translate(${ox}, ${oy})`);
 
-    const pts = (arr: { x: number; y: number }[]) =>
-      arr.map((p) => `${p.x},${p.y}`).join(" ");
-
-    const draw = useCallback(
-      (p: number) => {
-        const svg = svgRef.current;
-        if (!svg) return;
-
-        const fTR = { x: OX + W + DX, y: OY + DY };
-        const fBR = { x: OX + W + DX, y: OY + H + DY };
-        const fBL = { x: OX + DX, y: OY + H + DY };
-
-        const ox = OX + DX * p;
-        const oy = OY + DY * p;
-        const tl = { x: ox, y: oy };
-        const tr = { x: ox + W, y: oy };
-        const br = { x: ox + W, y: oy + H };
-        const bl = { x: ox, y: oy + H };
-
-        svg.querySelector(`#${idRight}`)!.setAttribute("points", pts([tr, fTR, fBR, br]));
-        svg.querySelector(`#${idBottom}`)!.setAttribute("points", pts([bl, fBL, fBR, br]));
-        svg.querySelector(`#${idTop}`)!.setAttribute("points", pts([tl, tr, br, bl]));
-        svg.querySelector(`#${idTop}`)!.setAttribute("fill", p > 0.5 ? INK : BG);
-
-        const d = [
-          `M${tl.x},${tl.y} L${tr.x},${tr.y} L${fTR.x},${fTR.y} L${fBR.x},${fBR.y} L${fBL.x},${fBL.y} L${bl.x},${bl.y} Z`,
-          `M${tr.x},${tr.y} L${br.x},${br.y}`,
-          `M${br.x},${br.y} L${bl.x},${bl.y}`,
-          `M${br.x},${br.y} L${fBR.x},${fBR.y}`,
-          `M${bl.x},${bl.y} L${fBL.x},${fBL.y}`,
-        ].join(" ");
-        svg.querySelector(`#${idOutline}`)!.setAttribute("d", d);
-
-        const label = svg.querySelector(`#${idLabel}`);
-        if (label) {
-          label.setAttribute("fill", p > 0.5 ? BG : INK);
-        }
-      },
-      [idBottom, idLabel, idOutline, idRight, idTop],
-    );
+      if (label) {
+        label.setAttribute("fill", p > 0.5 ? "#E5E5E5" : "#1A1A1A");
+      }
+    }, []);
 
     const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 
@@ -146,14 +107,15 @@ const DoneKeycap = forwardRef<DoneKeycapHandle, DoneKeycapProps>(
     return (
       <div className={`inline-flex ${className}`}>
         <svg
-          ref={svgRef}
-          width={svgW}
-          height={svgH}
-          viewBox={`0 0 ${svgW} ${svgH}`}
+          width={SVG_W}
+          height={SVG_H}
+          viewBox="0 0 166 66"
+          fill="none"
+          xmlns="http://www.w3.org/2000/svg"
           style={{
             cursor: disabled ? "default" : "pointer",
-            overflow: "visible",
             display: "block",
+            overflow: "visible",
             opacity: disabled ? 0.45 : 1,
           }}
           role="button"
@@ -168,32 +130,50 @@ const DoneKeycap = forwardRef<DoneKeycapHandle, DoneKeycapProps>(
             handleDown();
           }}
         >
-          <polygon id={idRight} fill={BG} stroke="none" />
-          <polygon id={idBottom} fill={BG} stroke="none" />
-          <polygon id={idTop} fill={BG} stroke="none" />
-          <path
-            id={idOutline}
-            fill="none"
-            stroke={INK}
-            strokeWidth="1.5"
-            strokeLinejoin="miter"
-            strokeLinecap="butt"
-          />
-          <text
-            id={idLabel}
-            x={OX + DX + W / 2}
-            y={OY + DY + H / 2 + 5}
-            textAnchor="middle"
-            fill={INK}
-            style={{
-              fontFamily: "var(--font-planc), serif",
-              fontSize: "13px",
-              fontWeight: 700,
-              letterSpacing: "0.04em",
-            }}
-          >
-            DONE!
-          </text>
+          <g clipPath="url(#done-keycap-clip)">
+            {/* Gölge — sabit */}
+            <path
+              d="M160.5 0.5L165.5 5.5V65.5H5.5L0.5 60.5"
+              fill="#E5E5E5"
+            />
+            <path
+              d="M160.5 0.5L165.5 5.5V65.5H5.5L0.5 60.5"
+              stroke="#1A1A1A"
+              strokeMiterlimit={10}
+            />
+            <path d="M160.5 60.5L165.5 65.5" stroke="#1A1A1A" strokeMiterlimit={10} />
+
+            {/* Yüz — basınca kayar */}
+            <g ref={faceRef}>
+              <path
+                d="M160.5 0.5H0.5V60.5H160.5V0.5Z"
+                fill="#E5E5E5"
+                stroke="#1A1A1A"
+                strokeLinejoin="round"
+              />
+              <text
+                ref={labelRef}
+                x={FACE_CX}
+                y={FACE_CY}
+                textAnchor="middle"
+                dominantBaseline="central"
+                fill="#1A1A1A"
+                style={{
+                  fontFamily: "var(--font-planc), serif",
+                  fontSize: 20,
+                  fontWeight: 700,
+                  letterSpacing: "0.02em",
+                }}
+              >
+                DONE!
+              </text>
+            </g>
+          </g>
+          <defs>
+            <clipPath id="done-keycap-clip">
+              <rect width={166} height={66} fill="white" />
+            </clipPath>
+          </defs>
         </svg>
       </div>
     );

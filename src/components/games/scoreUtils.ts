@@ -7,7 +7,7 @@ export function scoreFromDistance(distance: number): number {
 
 export function getScoreLabel(points: number): string | null {
   if (points === 0) return "NOPE!";
-  if (points >= 900) return "SMOOTH!";
+  if (points >= 900) return "UNREAL!";
   if (points >= 700) return "NICE!";
   if (points >= 500) return "OK!";
   return null;

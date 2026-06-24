@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import gsap from "gsap";
+import { GameDescBox } from "@/components/GameDescBox";
 import DoneKeycap from "@/components/DoneKeycap";
 import ScoreSideReveal from "@/components/games/ScoreSideReveal";
 
@@ -739,41 +740,9 @@ export default function BezierBrain({
         </div>
       </div>
 
-      <div className="absolute top-0 left-0 z-10" style={{ paddingLeft: "24px" }}>
-        <div
-          ref={descBoxRef}
-          style={{
-            opacity: 0,
-            border: "1.5px solid #1A1A1A",
-            backgroundColor: "#FFFFFF",
-            padding: "14px 16px",
-            width: "190px",
-          }}
-        >
-          <h3
-            style={{
-              fontFamily: "var(--font-planc), serif",
-              fontWeight: 700,
-              fontSize: "13px",
-              color: "#1A1A1A",
-              marginBottom: "6px",
-            }}
-          >
-            {DESC_COPY.title}
-          </h3>
-          <p
-            style={{
-              fontFamily: "var(--font-planc), serif",
-              fontWeight: 450,
-              fontSize: "10px",
-              lineHeight: "14px",
-              color: "#1A1A1A",
-            }}
-          >
-            {DESC_COPY.body}
-          </p>
-        </div>
-      </div>
+      <GameDescBox ref={descBoxRef} title={DESC_COPY.title}>
+        {DESC_COPY.body}
+      </GameDescBox>
 
       <div style={{ position: "relative", width: "100%", height: "100%" }}>
         <div className="absolute inset-0 flex items-center justify-center">

@@ -73,13 +73,23 @@ export const GAMES = [
     order: 7,
   }),
   defineGame({
+    id: "gradient-guru",
+    name: "GRADIENT GURU",
+    category: "color",
+    description:
+      "Place the gradient points where you think they belong and trust your totally scientific understanding of gradients.",
+    duration: 45,
+    difficulty: "medium",
+    order: 8,
+  }),
+  defineGame({
     id: "color-split",
     name: "Color Split",
     category: "color",
     description: "Alanı doğru yüzdelik bölgelerle ayır.",
     duration: 28,
     difficulty: "hard",
-    order: 8,
+    order: 9,
   }),
   defineGame({
     id: "color-mix",
@@ -88,7 +98,7 @@ export const GAMES = [
     description: "İki pigmentin karışımını ezberinden üret.",
     duration: 30,
     difficulty: "medium",
-    order: 9,
+    order: 10,
   }),
   defineGame({
     id: "2px-difference",
@@ -98,7 +108,7 @@ export const GAMES = [
       "İki özdeş şekilden boyutu tam 2 px daha küçük olanı seç. Süre bitene kadar en yüksek doğruluk skorunu yakalamaya çalış.",
     duration: 35,
     difficulty: "hard",
-    order: 10,
+    order: 11,
   }),
   defineGame({
     id: "untitled-project",
@@ -107,7 +117,7 @@ export const GAMES = [
     description: "Boş tuvalde düzeni hissederek oluştur.",
     duration: 30,
     difficulty: "easy",
-    order: 11,
+    order: 12,
   }),
   defineGame({
     id: "widow-hunter",
@@ -116,7 +126,7 @@ export const GAMES = [
     description: "Dökümdeki yalnız satırları avla, tipografiyi koru.",
     duration: 32,
     difficulty: "hard",
-    order: 12,
+    order: 13,
   }),
 ].sort((a, b) => a.order - b.order);
 

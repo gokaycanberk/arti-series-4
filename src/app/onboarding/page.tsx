@@ -7,33 +7,87 @@ import type { GameShellChildState } from "@/components/GameShell";
 import OpticalPanic from "@/components/games/OpticalPanic";
 import RetinaCheck from "@/components/games/RetinaCheck";
 import BezierBrain from "@/components/games/BezierBrain";
+import GradientGuru from "@/components/games/GradientGuru";
+import { computeMarathonStep } from "@/lib/marathon";
 
 type Phase = "picking" | "transitioning" | "game";
 
-const MARATHON_GAMES = [
+type MarathonEntry = {
+  resetKey: string;
+  name: string;
+  duration: number;
+  /** İlk 4 oyun 3'er tur, son oyun 1 tur */
+  repeats: number;
+  Component: React.ComponentType<{
+    gameKey: string;
+    isPlaying: boolean;
+    shellReady: boolean;
+    onAnswer: (correct: boolean) => void;
+    onGameStart: () => void;
+    addRoundScore: (points: number) => void;
+    onGameComplete?: () => void;
+    round: number;
+    timeLeft: number;
+  }>;
+};
+
+/**
+ * Maraton sırası — 5 ana oyun.
+ * İlk 4 oyun 3'er kez (açılış animasyonu ile), 5. oyun tek tur zamana karşı.
+ */
+const MARATHON_GAMES: MarathonEntry[] = [
   {
     resetKey: "optical-panic",
     name: "OPTICAL PANIC",
     duration: 30,
+    repeats: 3,
     Component: OpticalPanic,
   },
   {
     resetKey: "retina-check",
     name: "RETINA CHECK",
     duration: 30,
+    repeats: 3,
     Component: RetinaCheck,
   },
   {
     resetKey: "bezier-brain",
     name: "BEZIER BRAIN",
     duration: 60,
+    repeats: 3,
     Component: BezierBrain,
   },
-] as const;
+  {
+    resetKey: "gradient-guru",
+    name: "GRADIENT GURU",
+    duration: 45,
+    repeats: 3,
+    Component: GradientGuru,
+  },
+];
+
+/**
+ * Hızlı test: `.env.local` içine `NEXT_PUBLIC_MARATHON_START_INDEX=3` yaz
+ * (0=Optical, 1=Retina, 2=Bezier, 3=Gradient).
+ */
+function getMarathonStart() {
+  const raw = Number(process.env.NEXT_PUBLIC_MARATHON_START_INDEX ?? 0);
+  if (!Number.isFinite(raw)) return { gameIndex: 0, attemptIndex: 0 };
+  const gameIndex = Math.min(
+    Math.max(0, Math.floor(raw)),
+    MARATHON_GAMES.length - 1,
+  );
+  return { gameIndex, attemptIndex: 0 };
+}
 
 export default function OnboardingPage() {
+  const start = getMarathonStart();
   const [phase, setPhase] = useState<Phase>("picking");
-  const [gameIndex, setGameIndex] = useState(0);
+  const [gameIndex, setGameIndex] = useState(start.gameIndex);
+  const [attemptIndex, setAttemptIndex] = useState(start.attemptIndex);
+  const [completedRounds, setCompletedRounds] = useState(() =>
+    computeMarathonStep(start.gameIndex, start.attemptIndex),
+  );
   const [marathonScore, setMarathonScore] = useState(0);
 
   const activeGame = MARATHON_GAMES[gameIndex] ?? MARATHON_GAMES[0]!;
@@ -51,11 +105,24 @@ export default function OnboardingPage() {
     setPhase("game");
   };
 
-  const handleGameComplete = () => {
+  const handleGameComplete = useCallback(() => {
+    const game = MARATHON_GAMES[gameIndex];
+    if (!game) return;
+
+    setCompletedRounds((prev) => prev + 1);
+
+    const nextAttempt = attemptIndex + 1;
+
+    if (nextAttempt < game.repeats) {
+      setAttemptIndex(nextAttempt);
+      return;
+    }
+
     if (gameIndex < MARATHON_GAMES.length - 1) {
       setGameIndex((prev) => prev + 1);
+      setAttemptIndex(0);
     }
-  };
+  }, [gameIndex, attemptIndex]);
 
   return (
     <div className="fixed inset-0 h-screen w-screen overflow-hidden bg-[#E8E8E8]">
@@ -92,11 +159,11 @@ export default function OnboardingPage() {
 
       {phase === "game" && (
         <GameShell
-          key="marathon"
-          resetKey={`${activeGame.resetKey}-${gameIndex + 1}`}
+          key={`marathon-${gameIndex}-${attemptIndex}`}
+          resetKey={`${activeGame.resetKey}-${gameIndex}-${attemptIndex}`}
           gameName={activeGame.name}
           duration={activeGame.duration}
-          initialRound={gameIndex + 1}
+          marathonStep={completedRounds}
           initialScore={marathonScore}
           onScoreAdd={handleScoreAdd}
         >
@@ -110,7 +177,7 @@ export default function OnboardingPage() {
             timeLeft,
           }: GameShellChildState) => (
             <ActiveComponent
-              key={activeGame.resetKey}
+              key={`${activeGame.resetKey}-${attemptIndex}`}
               gameKey={activeGame.resetKey}
               isPlaying={isPlaying}
               shellReady={shellReady}

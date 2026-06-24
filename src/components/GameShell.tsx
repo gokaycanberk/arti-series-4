@@ -94,7 +94,7 @@ export function GameShell({
     }
   }, [resetKey, duration, initialRound]);
 
-  const onAnswer = useCallback((correct: boolean) => {
+  const onAnswer = useCallback(() => {
     setRound((prev) => prev + 1);
   }, []);
 
@@ -112,6 +112,10 @@ export function GameShell({
 
   const startGame = useCallback(() => {
     setIsPlaying(true);
+  }, []);
+
+  const registerLiveScoreGetter = useCallback((getter: () => number) => {
+    setLiveScoreGetter((prev) => (prev === getter ? prev : getter));
   }, []);
 
   // Entrance animations
@@ -329,8 +333,7 @@ export function GameShell({
               shellReady,
               onAnswer,
               addRoundScore,
-              setLiveScoreGetter: (getter: () => number) =>
-                setLiveScoreGetter(() => getter),
+              setLiveScoreGetter: registerLiveScoreGetter,
               endGame,
               startGame,
             })}

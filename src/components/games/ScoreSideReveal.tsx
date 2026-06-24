@@ -47,8 +47,8 @@ const GURU_STACK_COLORS = [
   "#3AE091",
   "#45EDE2",
 ];
-/** Figma: 15px adım @ 200px → ölçekli */
-const GURU_STACK_STEP = 13;
+/** Figma: katmanlar arası dikey adım (px) */
+export const GURU_STACK_STEP = 8;
 
 const TRAIL_COLORS = [
   "#5AD8FF",

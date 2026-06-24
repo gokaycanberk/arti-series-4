@@ -80,6 +80,7 @@ export function MarathonProgressBar({ step }: MarathonProgressBarProps) {
         className="pointer-events-none absolute top-1/2 -translate-x-1/2 -translate-y-1/2"
         style={{ left: `${avatarLeft}%`, transition: "left 0.5s ease" }}
       >
+        {/* eslint-disable-next-line @next/next/no-img-element -- GSAP progress avatar */}
         <img
           src="/Avatar_Set/face/face.png"
           alt=""

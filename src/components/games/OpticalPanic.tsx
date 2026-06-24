@@ -534,7 +534,7 @@ export default function OpticalPanic({
 
       <div
         className="absolute z-10 flex flex-col"
-        style={{ left: DESC_BOX_LEFT, top: DESC_BOX_TOP + 108, gap: 12 }}
+        style={{ left: DESC_BOX_LEFT, top: DESC_BOX_TOP + 140, gap: 12 }}
       >
         <div ref={controlsRef} style={{ opacity: 0, display: "flex", gap: "8px" }}>
           <ArrowKeycap

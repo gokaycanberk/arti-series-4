@@ -4,7 +4,9 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import gsap from "gsap";
 import DoneKeycap from "@/components/DoneKeycap";
 import { GameDescBox } from "@/components/GameDescBox";
-import ScoreSideReveal from "@/components/games/ScoreSideReveal";
+import ScoreSideReveal, {
+  GURU_STACK_STEP,
+} from "@/components/games/ScoreSideReveal";
 
 /* ─── TYPES ─── */
 interface GradientGuruProps {
@@ -47,8 +49,6 @@ interface GradientRound {
 
 /** Guru skor stack görsel merkez düzeltmesi (katmanlar alta doğru) */
 const GURU_SCORE_STACK_LAYERS = 7;
-const GURU_SCORE_STACK_STEP = 13;
-const GRADIENT_GURU_DONE_BAND = 88;
 
 const GRADIENT_ROUNDS: GradientRound[] = [
   {
@@ -424,7 +424,7 @@ export default function GradientGuru({
     tl.to(tlEl, { opacity: 0, duration: 0.2 }, 0.85);
     tl.to(brEl, { opacity: 0, duration: 0.2 }, 0.85);
     tl.to(plus, { opacity: 1, duration: 0.3 }, 0.9);
-  }, [boxSize, onAnswer, onGameComplete]);
+  }, [onAnswer, onGameComplete]);
 
   /* ── DONE handler ── */
   const handleDone = useCallback(() => {
@@ -449,10 +449,10 @@ export default function GradientGuru({
       if (stage) {
         const r = stage.getBoundingClientRect();
         // Figma: ön katman üstte, 7 katman alta — görsel merkez gradient ortasında
-        const stackDepth = GURU_SCORE_STACK_LAYERS * GURU_SCORE_STACK_STEP;
+        const stackDepth = GURU_SCORE_STACK_LAYERS * GURU_STACK_STEP;
         setScoreOrigin({
           x: r.left + r.width / 2,
-          y: r.top + r.height / 2 - stackDepth * 0.62,
+          y: r.top + r.height / 2 - stackDepth * 0.5 - 72,
         });
       }
       setFlyScore(totalPts);
@@ -538,10 +538,9 @@ export default function GradientGuru({
       </GameDescBox>
 
       {/* ── Main Game Stage ── */}
-      <div
-        className="absolute inset-0 flex min-h-0 flex-col"
-      >
-        <div className="relative flex min-h-0 flex-1 items-center justify-center">
+      <div className="absolute inset-0 flex min-h-0 flex-col">
+        <div className="min-h-0 flex-1" />
+        <div className="relative flex shrink-0 items-center justify-center">
         {/* Plus sign (visible at start and end) */}
         <svg
           ref={plusRef}
@@ -720,14 +719,9 @@ export default function GradientGuru({
         </div>
         </div>
 
-        {showDone && (
-          <div
-            className="flex shrink-0 items-center justify-center"
-            style={{ height: GRADIENT_GURU_DONE_BAND }}
-          >
-            <DoneKeycap onPress={handleDone} />
-          </div>
-        )}
+        <div className="flex min-h-0 flex-1 items-center justify-center">
+          {showDone && <DoneKeycap onPress={handleDone} />}
+        </div>
       </div>
 
       {/* ── Score Fly Animation ── */}

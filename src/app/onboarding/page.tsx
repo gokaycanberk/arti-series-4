@@ -8,7 +8,9 @@ import OpticalPanic from "@/components/games/OpticalPanic";
 import RetinaCheck from "@/components/games/RetinaCheck";
 import BezierBrain from "@/components/games/BezierBrain";
 import GradientGuru from "@/components/games/GradientGuru";
+import UntitledProject from "@/components/games/UntitledProject";
 import { computeMarathonStep } from "@/lib/marathon";
+import { getGameById } from "@/lib/games";
 
 type Phase = "picking" | "transitioning" | "game";
 
@@ -64,6 +66,13 @@ const MARATHON_GAMES: MarathonEntry[] = [
     repeats: 3,
     Component: GradientGuru,
   },
+  {
+    resetKey: "untitled-project",
+    name: "UNTITLED-1",
+    duration: 60,
+    repeats: 1,
+    Component: UntitledProject,
+  },
 ];
 
 /**
@@ -91,6 +100,7 @@ export default function OnboardingPage() {
   const [marathonScore, setMarathonScore] = useState(0);
 
   const activeGame = MARATHON_GAMES[gameIndex] ?? MARATHON_GAMES[0]!;
+  const activeGameMeta = getGameById(activeGame.resetKey);
   const ActiveComponent = activeGame.Component;
 
   const handleScoreAdd = useCallback((points: number) => {
@@ -162,6 +172,7 @@ export default function OnboardingPage() {
           key={`marathon-${gameIndex}-${attemptIndex}`}
           resetKey={`${activeGame.resetKey}-${gameIndex}-${attemptIndex}`}
           gameName={activeGame.name}
+          description={activeGameMeta?.description}
           duration={activeGame.duration}
           marathonStep={completedRounds}
           initialScore={marathonScore}
@@ -172,6 +183,7 @@ export default function OnboardingPage() {
             shellReady,
             onAnswer,
             addRoundScore,
+            endGame,
             startGame,
             round,
             timeLeft,
@@ -187,6 +199,9 @@ export default function OnboardingPage() {
               onGameComplete={handleGameComplete}
               round={round}
               timeLeft={timeLeft}
+              {...(activeGame.resetKey === "untitled-project"
+                ? { endGame }
+                : {})}
             />
           )}
         </GameShell>

@@ -2,9 +2,12 @@
 
 import gsap from "gsap";
 import { useEffect, useState, useCallback, useRef } from "react";
+import { GameDescBox } from "@/components/GameDescBox";
 import { MarathonProgressBar } from "@/components/MarathonProgressBar";
 import {
   SHELL_BAR_INSET_X,
+  SHELL_CHROME_Z,
+  SHELL_GAME_Z,
   SHELL_HEADER_HEIGHT,
   SHELL_LOGO_HEIGHT,
   SHELL_LOGO_TOP,
@@ -54,6 +57,7 @@ interface GameShellProps {
 export function GameShell({
   resetKey,
   gameName,
+  description,
   duration = 30,
   marathonStep = 0,
   initialRound = 1,
@@ -144,14 +148,22 @@ export function GameShell({
         { x: 80, opacity: 0 },
         { x: 0, opacity: 1, duration: 0.7, ease: "power3.out" },
         0.35,
-      )
-      .fromTo(
+      );
+    if (description) {
+      tl.fromTo(
+        "#gs-left-panel",
+        { x: -40, opacity: 0 },
+        { x: 0, opacity: 1, duration: 0.7, ease: "power3.out" },
+        0.35,
+      );
+    }
+    tl.fromTo(
         "#gs-game-area",
         { y: 40, opacity: 0 },
         { y: 0, opacity: 1, duration: 0.7 },
         0.6,
       );
-  }, []);
+  }, [description]);
 
   const formatTime = (seconds: number) => {
     const m = Math.floor(seconds / 60)
@@ -170,7 +182,7 @@ export function GameShell({
       {/* HEADER — Figma: menu @68px, logo, progress @128px */}
       <div
         id="gs-header"
-        className="relative flex-shrink-0"
+        className="relative z-[30] flex-shrink-0"
         style={{ height: SHELL_HEADER_HEIGHT, opacity: 0 }}
       >
         <button
@@ -241,12 +253,29 @@ export function GameShell({
         className="relative min-h-0 flex-1"
         style={{ opacity: 0 }}
       >
+        {description ? (
+          <div
+            id="gs-left-panel"
+            className="pointer-events-none absolute inset-0"
+            style={{ zIndex: SHELL_CHROME_Z, opacity: 0 }}
+          >
+            <GameDescBox
+              title={gameName ?? ""}
+              className="pointer-events-auto"
+              style={{ opacity: 1 }}
+            >
+              {description}
+            </GameDescBox>
+          </div>
+        ) : null}
+
         {/* Sağ skor paneli — bar altında, Figma hizası */}
         <div
           id="gs-right-panel"
-          className="absolute z-10 flex flex-col items-end"
+          className="absolute flex flex-col items-end"
           style={{
             opacity: 0,
+            zIndex: SHELL_CHROME_Z,
             top: SHELL_PANEL_TOP,
             right: SHELL_PANEL_INSET_X,
             gap: SHELL_SCORE_PANEL_GAP,
@@ -323,7 +352,10 @@ export function GameShell({
         </div>
 
         {children ? (
-          <div className="absolute inset-0">
+          <div
+            className="absolute inset-0"
+            style={{ zIndex: SHELL_GAME_Z }}
+          >
             {children({
               score,
               round,

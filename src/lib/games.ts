@@ -112,10 +112,11 @@ export const GAMES = [
   }),
   defineGame({
     id: "untitled-project",
-    name: "Untitled Project",
+    name: "UNTITLED-1",
     category: "structure",
-    description: "Boş tuvalde düzeni hissederek oluştur.",
-    duration: 30,
+    description:
+      "Save as many files as possible before your computer crashes and humbles your creative confidence.",
+    duration: 60,
     difficulty: "easy",
     order: 12,
   }),

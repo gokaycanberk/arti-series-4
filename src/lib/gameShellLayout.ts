@@ -43,3 +43,31 @@ export const SHELL_SCORE_PANEL_WIDTH = 196;
 
 /** Skor kutuları arası dikey boşluk */
 export const SHELL_SCORE_PANEL_GAP = 16;
+
+/** Shell chrome (açıklama + skor) — oyun popup'larının üstünde */
+export const SHELL_CHROME_Z = 20;
+
+/** Oyun içeriği katmanı */
+export const SHELL_GAME_Z = 0;
+
+/** Sağ skor paneli yığın yüksekliği (HEX + rakamlar + timer) */
+export const SHELL_SCORE_PANEL_STACK_H =
+  34 + SHELL_SCORE_PANEL_GAP + 34 + SHELL_SCORE_PANEL_GAP + 34;
+
+/**
+ * Oyun içeriği (Illustrator çubuğu + sekmeler) — shell chrome altından başlar.
+ * Skor paneli yığını + ekstra boşluk.
+ */
+export const SHELL_GAME_TOP_OFFSET =
+  SHELL_PANEL_TOP + SHELL_SCORE_PANEL_STACK_H + 36;
+
+/**
+ * Oyun alanında sekmeler / popup'lar için güvenli iç boşluk —
+ * sol açıklama ve sağ skor panelinin yatay altında kalır.
+ */
+export const SHELL_GAME_SAFE_INSET = {
+  top: 12,
+  left: SHELL_PANEL_INSET_X + 200,
+  right: SHELL_PANEL_INSET_X + SHELL_SCORE_PANEL_WIDTH + 24,
+  bottom: 80,
+} as const;

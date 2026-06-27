@@ -49,14 +49,16 @@ const VIEWBOX = `${-VB_PAD} ${-VB_PAD} ${468 + VB_PAD * 2} ${640 + VB_PAD * 2}`;
 const GAME_VB = { w: 468, h: 640 };
 const SFINAL_VB = { w: 226, h: 305 };
 
-/** Positions from public/letters/Sfinal.svg (scaled to game viewBox) */
-const SFINAL_POINTS: PointDef[] = [
-  // 4 gray fixed terminals — path cap corners from Sfinal main path
-  { x: 212.402, y: 87.9418, fixed: true, rail: "outer" },
-  { x: 176.231, y: 87.9418, fixed: true, rail: "inner" },
-  { x: 5.11719, y: 204.595, fixed: true, rail: "outer" },
-  { x: 40.4797, y: 204.595, fixed: true, rail: "inner" },
-  // 12 black moveable break points
+/** S.svg cap köşeleri — path H segment uçları, ölçeklenmez */
+const FIXED_CORNERS: PointDef[] = [
+  { x: 449.017, y: 180.77, fixed: true, rail: "outer" },
+  { x: 370.757, y: 180.77, fixed: true, rail: "inner" },
+  { x: 0.536865, y: 433.16, fixed: true, rail: "outer" },
+  { x: 77.0469, y: 433.16, fixed: true, rail: "inner" },
+];
+
+/** Sfinal.svg siyah noktalar — game viewBox'a ölçeklenir */
+const MOVABLE_POINTS: PointDef[] = [
   { x: 111.2, y: 4.622, fixed: false, rail: "inner" },
   { x: 111.2, y: 35.511, fixed: false, rail: "inner" },
   { x: 15.687, y: 81.439, fixed: false, rail: "inner" },
@@ -71,6 +73,8 @@ const SFINAL_POINTS: PointDef[] = [
   { x: 220.938, y: 216.377, fixed: false, rail: "outer" },
 ];
 
+const SFINAL_POINTS: PointDef[] = [...FIXED_CORNERS, ...MOVABLE_POINTS];
+
 const DESC_COPY = {
   title: "Bezier Brain",
   body: "Move each anchor point to its correct position on the path then press done and let's see how type nerd you really are.",
@@ -78,11 +82,11 @@ const DESC_COPY = {
 
 const INTRO_HOLD = 2;
 const DOT_RADIUS = 7;
-const GHOST_FADE_DURATION = 0.55;
+const GHOST_FADE_DURATION = 1.4;
 const SNAP_START_DELAY = 0.6;
-const SNAP_DURATION = 1.35;
-const SNAP_STAGGER = 0.07;
-const REVEAL_HOLD = 1.5;
+const SNAP_DURATION = 2.4;
+const SNAP_STAGGER = 0.1;
+const REVEAL_HOLD = 2.8;
 const SHRINK_DURATION = 0.9;
 const SHRINK_TARGET = 0.36;
 const VANISH_AT_SCALE = 0.42;
@@ -172,7 +176,7 @@ function syncPointsPositions(
 
 function buildGamePoints(path: SVGPathElement, total: number): GamePoint[] {
   return SFINAL_POINTS.map((def) => {
-    const scaled = scalePoint(def);
+    const scaled = def.fixed ? def : scalePoint(def);
     const correctT = projectToPath(path, total, scaled.x, scaled.y);
 
     if (def.fixed) {
@@ -782,6 +786,11 @@ export default function BezierBrain({
             >
               <g ref={letterRef} style={{ opacity: phase === "waiting" ? 0 : 1 }}>
                 <path
+                  d={S_PATH}
+                  fill="#E5E5E5"
+                  stroke="none"
+                />
+                <path
                   ref={pathRef}
                   d={S_PATH}
                   fill="none"
@@ -801,8 +810,8 @@ export default function BezierBrain({
                               cx={point.correctX}
                               cy={point.correctY}
                               r={DOT_RADIUS}
-                              fill="#C8C8C8"
-                              stroke="#999999"
+                              fill="#9AE66E"
+                              stroke="#1A1A1A"
                               strokeWidth={1.5}
                               opacity={ghostOpacity}
                               pointerEvents="none"
@@ -817,7 +826,7 @@ export default function BezierBrain({
                             cx={point.correctX}
                             cy={point.correctY}
                             r={DOT_RADIUS}
-                            fill="#C8C8C8"
+                            fill="#E5E5E5"
                             stroke="#888888"
                             strokeWidth={1.5}
                             pointerEvents="none"

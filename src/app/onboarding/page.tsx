@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import ColorPicker from "@/components/ColorPicker";
 import { GameShell } from "@/components/GameShell";
 import type { GameShellChildState } from "@/components/GameShell";
@@ -9,17 +9,18 @@ import RetinaCheck from "@/components/games/RetinaCheck";
 import BezierBrain from "@/components/games/BezierBrain";
 import GradientGuru from "@/components/games/GradientGuru";
 import UntitledProject from "@/components/games/UntitledProject";
-import { computeMarathonStep } from "@/lib/marathon";
+import { MarathonResults } from "@/components/marathon-results/MarathonResults";
+import { computeMarathonStep, getMarathonRepeats } from "@/lib/marathon";
+import { getMarathonDevConfig } from "@/lib/marathonDev";
 import { getGameById } from "@/lib/games";
+import { useGameStore } from "@/stores/gameStore";
 
-type Phase = "picking" | "transitioning" | "game";
+type Phase = "picking" | "transitioning" | "game" | "results";
 
 type MarathonEntry = {
   resetKey: string;
   name: string;
   duration: number;
-  /** İlk 4 oyun 3'er tur, son oyun 1 tur */
-  repeats: number;
   Component: React.ComponentType<{
     gameKey: string;
     isPlaying: boolean;
@@ -34,77 +35,90 @@ type MarathonEntry = {
 };
 
 /**
- * Maraton sırası — 5 ana oyun.
- * İlk 4 oyun 3'er kez (açılış animasyonu ile), 5. oyun tek tur zamana karşı.
+ * Maraton sırası — 5 ana oyun, şimdilik her biri 1 kez.
+ * (3'lü tekrarlar + harf/gradient varyasyonu sonraki faza.)
  */
 const MARATHON_GAMES: MarathonEntry[] = [
   {
     resetKey: "optical-panic",
     name: "OPTICAL PANIC",
     duration: 30,
-    repeats: 3,
     Component: OpticalPanic,
   },
   {
     resetKey: "retina-check",
     name: "RETINA CHECK",
     duration: 30,
-    repeats: 3,
     Component: RetinaCheck,
   },
   {
     resetKey: "bezier-brain",
     name: "BEZIER BRAIN",
     duration: 60,
-    repeats: 3,
     Component: BezierBrain,
   },
   {
     resetKey: "gradient-guru",
     name: "GRADIENT GURU",
     duration: 45,
-    repeats: 3,
     Component: GradientGuru,
   },
   {
     resetKey: "untitled-project",
     name: "UNTITLED-1",
-    duration: 60,
-    repeats: 1,
+    duration: 5,
     Component: UntitledProject,
   },
 ];
 
-/**
- * Hızlı test: `.env.local` içine `NEXT_PUBLIC_MARATHON_START_INDEX=3` yaz
- * (0=Optical, 1=Retina, 2=Bezier, 3=Gradient).
- */
-function getMarathonStart() {
-  const raw = Number(process.env.NEXT_PUBLIC_MARATHON_START_INDEX ?? 0);
-  if (!Number.isFinite(raw)) return { gameIndex: 0, attemptIndex: 0 };
-  const gameIndex = Math.min(
-    Math.max(0, Math.floor(raw)),
-    MARATHON_GAMES.length - 1,
-  );
-  return { gameIndex, attemptIndex: 0 };
+const MARATHON_DEV = getMarathonDevConfig(MARATHON_GAMES.length);
+
+function getInitialPhase(): Phase {
+  if (MARATHON_DEV.skipToResults) return "results";
+  if (MARATHON_DEV.startAtGame) return "game";
+  return "picking";
 }
 
 export default function OnboardingPage() {
-  const start = getMarathonStart();
-  const [phase, setPhase] = useState<Phase>("picking");
-  const [gameIndex, setGameIndex] = useState(start.gameIndex);
-  const [attemptIndex, setAttemptIndex] = useState(start.attemptIndex);
-  const [completedRounds, setCompletedRounds] = useState(() =>
-    computeMarathonStep(start.gameIndex, start.attemptIndex),
+  const lastGameIndex = MARATHON_GAMES.length - 1;
+  const devStartIndex = MARATHON_DEV.skipToResults
+    ? lastGameIndex
+    : MARATHON_DEV.startGameIndex;
+
+  const [phase, setPhase] = useState<Phase>(getInitialPhase);
+  const [gameIndex, setGameIndex] = useState(devStartIndex);
+  const [attemptIndex, setAttemptIndex] = useState(0);
+  const [completedRounds, setCompletedRounds] = useState(() => {
+    if (MARATHON_DEV.skipToResults) return MARATHON_GAMES.length;
+    if (MARATHON_DEV.startAtGame) return devStartIndex;
+    return computeMarathonStep(devStartIndex, 0);
+  });
+  const [marathonScore, setMarathonScore] = useState(() => {
+    if (MARATHON_DEV.skipToResults || MARATHON_DEV.startAtGame) {
+      return MARATHON_DEV.mockScore;
+    }
+    return 0;
+  });
+  const marathonScoreRef = useRef(
+    MARATHON_DEV.skipToResults || MARATHON_DEV.startAtGame
+      ? MARATHON_DEV.mockScore
+      : 0,
   );
-  const [marathonScore, setMarathonScore] = useState(0);
+
+  useEffect(() => {
+    useGameStore.getState().hydrateNicknameFromStorage();
+  }, []);
 
   const activeGame = MARATHON_GAMES[gameIndex] ?? MARATHON_GAMES[0]!;
   const activeGameMeta = getGameById(activeGame.resetKey);
   const ActiveComponent = activeGame.Component;
 
   const handleScoreAdd = useCallback((points: number) => {
-    setMarathonScore((prev) => prev + points);
+    setMarathonScore((prev) => {
+      const next = prev + points;
+      marathonScoreRef.current = next;
+      return next;
+    });
   }, []);
 
   const handleTransitionStart = () => {
@@ -121,9 +135,10 @@ export default function OnboardingPage() {
 
     setCompletedRounds((prev) => prev + 1);
 
+    const repeats = getMarathonRepeats(gameIndex);
     const nextAttempt = attemptIndex + 1;
 
-    if (nextAttempt < game.repeats) {
+    if (nextAttempt < repeats) {
       setAttemptIndex(nextAttempt);
       return;
     }
@@ -131,8 +146,32 @@ export default function OnboardingPage() {
     if (gameIndex < MARATHON_GAMES.length - 1) {
       setGameIndex((prev) => prev + 1);
       setAttemptIndex(0);
+      return;
     }
+
+    setPhase("results");
+    useGameStore.getState().addMarathonScore(marathonScoreRef.current);
   }, [gameIndex, attemptIndex]);
+
+  const handlePlayAgain = useCallback(() => {
+    if (MARATHON_DEV.startAtGame && !MARATHON_DEV.skipToResults) {
+      setPhase("game");
+      setGameIndex(devStartIndex);
+      setAttemptIndex(0);
+      setCompletedRounds(devStartIndex);
+      setMarathonScore(MARATHON_DEV.mockScore);
+      marathonScoreRef.current = MARATHON_DEV.mockScore;
+      return;
+    }
+
+    setPhase("picking");
+    setGameIndex(0);
+    setAttemptIndex(0);
+    setCompletedRounds(0);
+    setMarathonScore(0);
+    marathonScoreRef.current = 0;
+    useGameStore.getState().resetMarathon();
+  }, [devStartIndex]);
 
   return (
     <div className="fixed inset-0 h-screen w-screen overflow-hidden bg-[#E8E8E8]">
@@ -167,7 +206,7 @@ export default function OnboardingPage() {
         />
       )}
 
-      {phase === "game" && (
+      {(phase === "game" || phase === "results") && (
         <GameShell
           key={`marathon-${gameIndex}-${attemptIndex}`}
           resetKey={`${activeGame.resetKey}-${gameIndex}-${attemptIndex}`}
@@ -205,6 +244,15 @@ export default function OnboardingPage() {
             />
           )}
         </GameShell>
+      )}
+
+      {phase === "results" && (
+        <MarathonResults
+          score={marathonScore}
+          onPlayAgain={handlePlayAgain}
+          instant={MARATHON_DEV.instantResults}
+          freezeScene={MARATHON_DEV.freezeScene}
+        />
       )}
     </div>
   );

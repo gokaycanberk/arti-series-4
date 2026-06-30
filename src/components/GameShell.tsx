@@ -66,6 +66,12 @@ export function GameShell({
   children,
 }: GameShellProps) {
   const nickname = useGameStore((state) => state.nickname);
+  const hexChipBg =
+    nickname && /^#?[0-9A-F]{6}$/i.test(nickname)
+      ? nickname.startsWith("#")
+        ? nickname
+        : `#${nickname}`
+      : "#F7BEA0";
   const [score, setScore] = useState(initialScore);
   const [round, setRound] = useState(initialRound);
   const [timeLeft, setTimeLeft] = useState(duration);
@@ -282,9 +288,10 @@ export function GameShell({
           }}
         >
           <div
+            id="gs-hex-chip"
             className="flex items-center justify-center border border-[#1A1A1A]"
             style={{
-              backgroundColor: "#F7BEA0",
+              backgroundColor: hexChipBg,
               width: `${panelWidth}px`,
               height: "34px",
             }}

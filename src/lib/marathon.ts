@@ -1,7 +1,8 @@
-/** Maraton: 5 ana oyun — ilk 4'ü 3'er kez, son oyun tek tur (zamana karşı). */
+/** Maraton: 5 ana oyun — geçici olarak her biri 1 kez (tekrarlar sonraki faz). */
 export const MARATHON_MAIN_GAMES = 5;
 
-export const MARATHON_REPEATS: readonly number[] = [3, 3, 3, 3, 1];
+/** Oyun başına tur sayısı — ileride harf/gradient varyasyonu için artırılacak. */
+export const MARATHON_REPEATS: readonly number[] = [1, 1, 1, 1, 1];
 
 export const MARATHON_TOTAL_STEPS = MARATHON_REPEATS.reduce(
   (sum, n) => sum + n,
@@ -21,7 +22,7 @@ export function computeMarathonStep(
   return Math.min(step, MARATHON_TOTAL_STEPS);
 }
 
-/** Avatar konumu — 5 eşit segment; ilk 4'ünde 3'er alt tur (toplam 13 adım). */
+/** Avatar konumu — 5 eşit segment. */
 export function marathonAvatarPercent(step: number): number {
   if (MARATHON_TOTAL_STEPS <= 0) return 0;
 
@@ -47,7 +48,11 @@ export function marathonAvatarPercent(step: number): number {
   return Math.min(100, percent);
 }
 
-/** Segment içi alt bölüm sayısı (1–3). */
+/** Segment içi alt bölüm sayısı (tekrar sayısı). */
 export function marathonSubdivisions(segmentIndex: number): number {
-  return segmentIndex < MARATHON_MAIN_GAMES - 1 ? 3 : 1;
+  return MARATHON_REPEATS[segmentIndex] ?? 1;
+}
+
+export function getMarathonRepeats(gameIndex: number): number {
+  return MARATHON_REPEATS[gameIndex] ?? 1;
 }

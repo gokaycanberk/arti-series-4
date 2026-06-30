@@ -42,7 +42,7 @@ export function MarathonProgressBar({ step }: MarathonProgressBarProps) {
               className="relative min-w-0 flex-1"
               style={{ height: "100%" }}
             >
-              {/* (1) Oyun içi ayırıcı — kısa çizgi, aynı oyunun 3 turu */}
+              {/* Oyun içi ayırıcı — aynı oyunun birden fazla turu varsa */}
               {subs > 1 &&
                 Array.from({ length: subs - 1 }).map((__, divIndex) => (
                   <div

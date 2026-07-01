@@ -10,6 +10,13 @@ import {
 import gsap from "gsap";
 import { GameDescBox } from "@/components/GameDescBox";
 import ScoreFlyPopup from "@/components/games/ScoreFlyPopup";
+import {
+  getRetinaShapeLabel,
+  getRetinaShapeStyle,
+  getRevealMeetOverlap,
+  pickRetinaVariation,
+  type RetinaVariation,
+} from "@/lib/retinaCheckVariations";
 
 interface RetinaCheckProps {
   gameKey: string;
@@ -19,6 +26,8 @@ interface RetinaCheckProps {
   onGameStart: () => void;
   addRoundScore: (points: number) => void;
   onGameComplete?: () => void;
+  /** Test: 0=kare, 1=daire, 2=üçgen … */
+  sequenceIndex?: number;
   round: number;
   timeLeft: number;
 }
@@ -28,7 +37,6 @@ type Side = "left" | "right";
 
 const BASE_SIZE = 132;
 const SIZE_DIFF = 2;
-const SHAPE_COLOR = "#FF1A1A";
 const INTRO_HOLD = 2;
 const REVEAL_MEET_DURATION = 1.15;
 const REVEAL_ZOOM_DURATION = 1.65;
@@ -53,14 +61,18 @@ function computeRevealLayout(
   bh: number,
   totalW: number,
   maxH: number,
+  meetOverlap = 0,
 ) {
-  const zoomScale = (bw * TARGET_WIDTH_RATIO) / totalW;
+  const effectiveW = totalW - meetOverlap;
+  const zoomScale = (bw * TARGET_WIDTH_RATIO) / effectiveW;
   const scaledH = maxH * zoomScale;
-
-  const centerX = bw / 2 - totalW / 2;
+  const visualCenterX = effectiveW / 2;
+  const centerX = bw / 2 - visualCenterX;
+  const originXPercent =
+    meetOverlap > 0 ? (visualCenterX / totalW) * 100 : 50;
   const finalY = bh + scaledH * BOTTOM_CLIP_RATIO - maxH;
 
-  return { zoomScale, centerX, finalY, scaledH };
+  return { zoomScale, centerX, finalY, scaledH, originXPercent, effectiveW };
 }
 
 function usePageZoomPenalty() {
@@ -107,9 +119,15 @@ export default function RetinaCheck({
   onGameStart,
   addRoundScore,
   onGameComplete,
+  sequenceIndex,
 }: RetinaCheckProps) {
   const [phase, setPhase] = useState<Phase>("waiting");
   const [biggerSide, setBiggerSide] = useState<Side>("left");
+  const [variation, setVariation] = useState<RetinaVariation>(() =>
+    pickRetinaVariation(
+      sequenceIndex !== undefined ? { sequenceIndex } : undefined,
+    ),
+  );
   const [flyScore, setFlyScore] = useState<number | null>(null);
 
   const boardRef = useRef<HTMLDivElement>(null);
@@ -120,16 +138,37 @@ export default function RetinaCheck({
   const descBoxRef = useRef<HTMLDivElement>(null);
   const scoreAnchorRef = useRef<HTMLDivElement>(null);
   const pickedRef = useRef(false);
+  const revealPendingRef = useRef(false);
+  const revealPointsRef = useRef(0);
   const onGameStartRef = useRef(onGameStart);
   useEffect(() => {
     onGameStartRef.current = onGameStart;
   });
+  const shapeLabel = getRetinaShapeLabel(variation.shape);
   const isZoomed = usePageZoomPenalty();
+  const gsapControlsSize = phase === "reveal" || phase === "scored";
 
   const leftSize = biggerSide === "left" ? BASE_SIZE + SIZE_DIFF : BASE_SIZE;
   const rightSize = biggerSide === "right" ? BASE_SIZE + SIZE_DIFF : BASE_SIZE;
   const pairWidth = leftSize + rightSize;
   const pairHeight = Math.max(leftSize, rightSize);
+
+  const leftShapeStyle = getRetinaShapeStyle(
+    variation.shape,
+    variation.color,
+    leftSize,
+  );
+  const rightShapeStyle = getRetinaShapeStyle(
+    variation.shape,
+    variation.color,
+    rightSize,
+  );
+  if (gsapControlsSize) {
+    delete leftShapeStyle.width;
+    delete leftShapeStyle.height;
+    delete rightShapeStyle.width;
+    delete rightShapeStyle.height;
+  }
 
   const getBoardMetrics = useCallback(() => {
     const board = boardRef.current;
@@ -190,10 +229,10 @@ export default function RetinaCheck({
       gsap.set(pairRef.current, { scale: 1, x: 0, y: 0 });
     }
     if (leftShapeRef.current) {
-      gsap.set(leftShapeRef.current, { x: 0, y: 0 });
+      gsap.set(leftShapeRef.current, { x: 0, y: 0, width: "", height: "" });
     }
     if (rightShapeRef.current) {
-      gsap.set(rightShapeRef.current, { x: 0, y: 0 });
+      gsap.set(rightShapeRef.current, { x: 0, y: 0, width: "", height: "" });
     }
   }, []);
 
@@ -212,20 +251,31 @@ export default function RetinaCheck({
       const totalW = leftW + rightW;
       const maxH = Math.max(leftW, rightW);
 
-      const { zoomScale, centerX, finalY } = computeRevealLayout(
-        bw,
-        bh,
-        totalW,
-        maxH,
+      const meetOverlap = getRevealMeetOverlap(
+        variation.shape,
+        leftW,
+        rightW,
       );
+      const rightMeetX = leftW - meetOverlap;
+      const useDimensionZoom = variation.shape !== "square";
+
+      const { zoomScale, centerX, finalY, scaledH, effectiveW } =
+        computeRevealLayout(bw, bh, totalW, maxH, meetOverlap);
 
       const meetX = centerX;
       const meetY = bh * MEET_BOTTOM_RATIO - maxH;
       const leftMeetY = maxH - leftW;
       const rightMeetY = maxH - rightW;
+      const finalDimY = bh + scaledH * BOTTOM_CLIP_RATIO - maxH * zoomScale;
+      const finalPairX = bw / 2 - (effectiveW * zoomScale) / 2;
+
+      gsap.killTweensOf([left, right, pair]);
+      gsap.set(pair, { transformOrigin: "50% 100%", scale: 1 });
+      gsap.set([left, right], { transformOrigin: "50% 100%" });
 
       const tl = gsap.timeline({ onComplete: onDone });
 
+      // 1) Dağınık konumdan taban hizalı yan yana — Figma meet
       tl.to(
         left,
         {
@@ -240,7 +290,7 @@ export default function RetinaCheck({
       tl.to(
         right,
         {
-          x: leftW,
+          x: rightMeetX,
           y: rightMeetY,
           duration: REVEAL_MEET_DURATION,
           ease: "power3.inOut",
@@ -259,19 +309,57 @@ export default function RetinaCheck({
         0,
       );
 
-      tl.to(
-        pair,
-        {
-          scale: zoomScale,
-          y: finalY,
-          transformOrigin: "50% 100%",
-          duration: REVEAL_ZOOM_DURATION,
-          ease: "power2.inOut",
-        },
-        REVEAL_MEET_DURATION * 0.3,
-      );
+      // 2) Yan yana geldikten sonra büyüt
+      if (useDimensionZoom) {
+        // Daire/üçgen: CSS scale bitmap'i büyütür → pikselleşme. Gerçek boyut animasyonu.
+        tl.to(
+          left,
+          {
+            width: leftW * zoomScale,
+            height: leftW * zoomScale,
+            y: leftMeetY * zoomScale,
+            duration: REVEAL_ZOOM_DURATION,
+            ease: "power2.inOut",
+          },
+          REVEAL_MEET_DURATION,
+        );
+        tl.to(
+          right,
+          {
+            width: rightW * zoomScale,
+            height: rightW * zoomScale,
+            x: rightMeetX * zoomScale,
+            y: rightMeetY * zoomScale,
+            duration: REVEAL_ZOOM_DURATION,
+            ease: "power2.inOut",
+          },
+          REVEAL_MEET_DURATION,
+        );
+        tl.to(
+          pair,
+          {
+            x: finalPairX,
+            y: finalDimY,
+            duration: REVEAL_ZOOM_DURATION,
+            ease: "power2.inOut",
+          },
+          REVEAL_MEET_DURATION,
+        );
+      } else {
+        tl.to(
+          pair,
+          {
+            scale: zoomScale,
+            y: finalY,
+            transformOrigin: "50% 100%",
+            duration: REVEAL_ZOOM_DURATION,
+            ease: "power2.inOut",
+          },
+          REVEAL_MEET_DURATION,
+        );
+      }
     },
-    [biggerSide],
+    [biggerSide, variation.shape],
   );
 
   const handlePick = useCallback(
@@ -279,19 +367,40 @@ export default function RetinaCheck({
       if (phase !== "playing" || !isPlaying || pickedRef.current || isZoomed)
         return;
       pickedRef.current = true;
+      revealPendingRef.current = true;
       setPhase("reveal");
 
       const correct = side === biggerSide;
       const points = correct ? 1000 : 0;
 
-      runRevealAnimation(() => {
-        setTimeout(() => {
-          setFlyScore(points);
-        }, SCORE_AFTER_REVEAL);
-      });
+      revealPointsRef.current = points;
     },
-    [biggerSide, isPlaying, isZoomed, phase, runRevealAnimation],
+    [biggerSide, isPlaying, isZoomed, phase],
   );
+
+  useLayoutEffect(() => {
+    if (phase !== "reveal" || !revealPendingRef.current) return;
+    revealPendingRef.current = false;
+
+    const left = leftShapeRef.current;
+    const right = rightShapeRef.current;
+    const leftW = biggerSide === "left" ? BASE_SIZE + SIZE_DIFF : BASE_SIZE;
+    const rightW = biggerSide === "right" ? BASE_SIZE + SIZE_DIFF : BASE_SIZE;
+    const maxH = Math.max(leftW, rightW);
+
+    if (left) {
+      gsap.set(left, { width: leftW, height: leftW });
+    }
+    if (right) {
+      gsap.set(right, { width: rightW, height: rightW });
+    }
+
+    runRevealAnimation(() => {
+      setTimeout(() => {
+        setFlyScore(revealPointsRef.current);
+      }, SCORE_AFTER_REVEAL);
+    });
+  }, [phase, biggerSide, runRevealAnimation]);
 
   const handleScoreFlyComplete = useCallback(
     (points: number) => {
@@ -313,7 +422,13 @@ export default function RetinaCheck({
     queueMicrotask(() => {
       if (cancelled) return;
       pickedRef.current = false;
+      revealPendingRef.current = false;
       setBiggerSide(nextSide);
+      setVariation(
+        pickRetinaVariation(
+          sequenceIndex !== undefined ? { sequenceIndex } : undefined,
+        ),
+      );
       setFlyScore(null);
       setPhase("intro");
     });
@@ -321,12 +436,21 @@ export default function RetinaCheck({
     return () => {
       cancelled = true;
     };
-  }, [shellReady, gameKey]);
+  }, [shellReady, gameKey, sequenceIndex]);
 
   useEffect(() => {
     if (!shellReady || phase !== "intro") return;
 
     resetShapeTransforms();
+
+    const skipIntro = sequenceIndex !== undefined && sequenceIndex > 0;
+    if (skipIntro) {
+      queueMicrotask(() => {
+        setPhase("playing");
+        onGameStartRef.current();
+      });
+      return;
+    }
 
     const card = introCardRef.current;
     const descBox = descBoxRef.current;
@@ -366,7 +490,7 @@ export default function RetinaCheck({
     return () => {
       tl.kill();
     };
-  }, [shellReady, gameKey, phase, resetShapeTransforms]);
+  }, [shellReady, gameKey, phase, resetShapeTransforms, sequenceIndex]);
 
   useLayoutEffect(() => {
     if (phase !== "playing") return;
@@ -423,7 +547,7 @@ export default function RetinaCheck({
         {(phase === "playing" || phase === "reveal" || phase === "scored") && (
           <div
             ref={pairRef}
-            className="absolute left-0 top-0 will-change-transform"
+            className="absolute left-0 top-0 will-change-transform overflow-visible"
             style={{ width: pairWidth, height: pairHeight }}
           >
             <button
@@ -432,14 +556,8 @@ export default function RetinaCheck({
               disabled={phase !== "playing" || isZoomed}
               onClick={() => handlePick("left")}
               className="absolute left-0 top-0 cursor-pointer outline-none disabled:cursor-default"
-              style={{
-                width: leftSize,
-                height: leftSize,
-                backgroundColor: SHAPE_COLOR,
-                border: "none",
-                padding: 0,
-              }}
-              aria-label="Sol kare — 2 piksel daha büyük olanı seç"
+              style={leftShapeStyle}
+              aria-label={`Sol ${shapeLabel} — 2 piksel daha büyük olanı seç`}
             />
             <button
               ref={rightShapeRef}
@@ -447,14 +565,8 @@ export default function RetinaCheck({
               disabled={phase !== "playing" || isZoomed}
               onClick={() => handlePick("right")}
               className="absolute left-0 top-0 cursor-pointer outline-none disabled:cursor-default"
-              style={{
-                width: rightSize,
-                height: rightSize,
-                backgroundColor: SHAPE_COLOR,
-                border: "none",
-                padding: 0,
-              }}
-              aria-label="Sağ kare — 2 piksel daha büyük olanı seç"
+              style={rightShapeStyle}
+              aria-label={`Sağ ${shapeLabel} — 2 piksel daha büyük olanı seç`}
             />
           </div>
         )}

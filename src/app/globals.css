@@ -2,8 +2,32 @@
 
 @font-face {
   font-family: "Planc";
+  src: url("/fonts/planc/Planc-Light.otf") format("opentype");
+  font-weight: 300;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Planc";
+  src: url("/fonts/planc/Planc-Book.otf") format("opentype");
+  font-weight: 450;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Planc";
   src: url("/fonts/planc/Planc-Bold.otf") format("opentype");
   font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Planc";
+  src: url("/fonts/planc/Planc-ExtraBold.otf") format("opentype");
+  font-weight: 800;
   font-style: normal;
   font-display: swap;
 }
@@ -25,6 +49,45 @@
   text-box-edge: cap alphabetic;
 }
 
+.menu-item-label {
+  color: #000;
+  font-family: var(--font-planc), Planc, sans-serif;
+  font-size: 190px;
+  font-style: normal;
+  font-weight: 300;
+  line-height: 0;
+  text-box-trim: trim-both;
+  text-box-edge: cap alphabetic;
+}
+
+.menu-item-label--hover {
+  font-weight: 800;
+}
+
+.why-panel-content {
+  color: #e5e5e5;
+  font-family: var(--font-planc), Planc, sans-serif;
+  font-size: 30px;
+  font-style: normal;
+  font-weight: 450;
+  line-height: normal;
+  text-box-trim: trim-both;
+  text-box-edge: cap alphabetic;
+}
+
+.why-panel-back {
+  width: 101px;
+  color: #000;
+  text-align: right;
+  font-family: var(--font-planc), Planc, sans-serif;
+  font-size: 80px;
+  font-style: normal;
+  font-weight: 800;
+  line-height: 1;
+  text-box-trim: trim-both;
+  text-box-edge: cap alphabetic;
+}
+
 /* Monokrom, sadece açık tema — özel tasarım belirteçleri. */
 :root {
   --background: #ffffff;
@@ -39,13 +102,18 @@
   --color-foreground: var(--foreground);
   --color-accent: var(--accent);
   --color-subtle: var(--subtle-border);
-  --shadow-card:
-    0 18px 40px rgb(0 0 0 / 0.07), 0 2px 8px rgb(0 0 0 / 0.04);
+  --shadow-card: 0 18px 40px rgb(0 0 0 / 0.07), 0 2px 8px rgb(0 0 0 / 0.04);
 
   --font-sans:
     var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif,
     "Apple Color Emoji", "Segoe UI Emoji";
   --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+}
+
+html,
+body {
+  overflow-x: clip;
+  max-width: 100%;
 }
 
 body {

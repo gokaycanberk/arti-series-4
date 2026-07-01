@@ -13,14 +13,13 @@ export const SHELL_PROGRESS_TOP = 108;
 export const SHELL_PROGRESS_HEIGHT = 12;
 
 /** Üst header yüksekliği — progress bar alt kenarına kadar */
-export const SHELL_HEADER_HEIGHT =
-  SHELL_PROGRESS_TOP + SHELL_PROGRESS_HEIGHT;
+export const SHELL_HEADER_HEIGHT = SHELL_PROGRESS_TOP + SHELL_PROGRESS_HEIGHT;
 
 /** İlerleme çubuğu altından panele dikey mesafe */
 export const SHELL_PANEL_TOP = 40;
 
-/** Hamburger menü — viewport tepesinden */
-export const SHELL_MENU_TOP = 52;
+/** Hamburger menü — viewport sol/tepe (SiteMenuOverlay toggle ile paylaşılır) */
+export const SHELL_MENU_TOP = 30;
 
 /** Hamburger çizgi boyutu */
 export const SHELL_MENU_WIDTH = 68;
@@ -35,8 +34,7 @@ export const SHELL_LOGO_HEIGHT = 64;
 /** Avatar + bar sarmalayıcı — bar üst kenarı SHELL_PROGRESS_TOP'ta */
 export const SHELL_PROGRESS_AVATAR_SIZE = 42;
 export const SHELL_PROGRESS_WRAP_TOP =
-  SHELL_PROGRESS_TOP -
-  (SHELL_PROGRESS_AVATAR_SIZE - SHELL_PROGRESS_HEIGHT) / 2;
+  SHELL_PROGRESS_TOP - (SHELL_PROGRESS_AVATAR_SIZE - SHELL_PROGRESS_HEIGHT) / 2;
 
 /** Sağ skor paneli genişliği */
 export const SHELL_SCORE_PANEL_WIDTH = 196;

@@ -12,7 +12,6 @@ import {
   useState,
 } from "react";
 
-import MinimalNav from "@/components/MinimalNav";
 import PressButton from "@/components/PressButton";
 
 const PARALLAX_LAYERS = [
@@ -206,7 +205,7 @@ export default function HomePage() {
   }, []);
 
   return (
-    <div className="relative left-1/2 w-screen max-w-none -translate-x-1/2">
+    <div className="relative w-full overflow-x-clip">
       {!introComplete && (
         <div
           ref={introRef}
@@ -283,9 +282,7 @@ export default function HomePage() {
         </div>
       )}
 
-      <section className="relative z-[1] min-h-screen w-full bg-[#E8E8E8] px-6 py-24 md:px-10">
-        <MinimalNav />
-
+      <section className="relative z-1 min-h-screen w-full overflow-x-clip bg-[#E8E8E8] px-6 py-24 md:px-10">
         {PARALLAX_LAYERS.map((layer, index) => (
           <div
             key={`${layer.src}-${index}`}
@@ -325,17 +322,18 @@ export default function HomePage() {
           />
         </div>
 
-        <p className="fixed bottom-6 right-6 z-40 text-xs text-[#666]">
-          created by{" "}
+        <div className="fixed bottom-6 right-6 z-60 flex flex-col items-end gap-0.5">
+          <span className="text-[9px] text-[#999]">created by</span>
           <Link
             href="https://studyo.co"
-            className="font-semibold text-[#1A1A1A] hover:underline"
             target="_blank"
             rel="noopener noreferrer"
+            aria-label="+Stüdyo"
           >
-            +Stüdyo
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/logo.svg" alt="+Stüdyo" width={53} height={13} />
           </Link>
-        </p>
+        </div>
       </section>
     </div>
   );

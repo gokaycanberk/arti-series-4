@@ -3,6 +3,7 @@
 import type { PropsWithChildren } from "react";
 import { useLayoutEffect } from "react";
 
+import { SiteMenuOverlay, SiteMenuProvider, SiteMenuToggle } from "@/components/site-menu";
 import { useGameStore } from "@/stores/gameStore";
 
 /**
@@ -18,10 +19,12 @@ export function ClientRoot({ children }: PropsWithChildren) {
   }, [hydrateNicknameFromStorage]);
 
   return (
-    <>
-      <div className="flex min-h-screen flex-col bg-background">
-        <main className="flex flex-1 flex-col">{children}</main>
+    <SiteMenuProvider>
+      <div className="flex min-h-screen flex-col overflow-x-clip bg-background">
+        <main className="flex flex-1 flex-col overflow-x-clip">{children}</main>
       </div>
-    </>
+      <SiteMenuToggle />
+      <SiteMenuOverlay />
+    </SiteMenuProvider>
   );
 }

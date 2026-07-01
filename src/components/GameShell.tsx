@@ -12,10 +12,6 @@ import {
   SHELL_LOGO_HEIGHT,
   SHELL_LOGO_TOP,
   SHELL_LOGO_WIDTH,
-  SHELL_MENU_BAR_GAP,
-  SHELL_MENU_BAR_HEIGHT,
-  SHELL_MENU_TOP,
-  SHELL_MENU_WIDTH,
   SHELL_PANEL_INSET_X,
   SHELL_PANEL_TOP,
   SHELL_PROGRESS_WRAP_TOP,
@@ -164,11 +160,11 @@ export function GameShell({
       );
     }
     tl.fromTo(
-        "#gs-game-area",
-        { y: 40, opacity: 0 },
-        { y: 0, opacity: 1, duration: 0.7 },
-        0.6,
-      );
+      "#gs-game-area",
+      { y: 40, opacity: 0 },
+      { y: 0, opacity: 1, duration: 0.7 },
+      0.6,
+    );
   }, [description]);
 
   const formatTime = (seconds: number) => {
@@ -188,44 +184,18 @@ export function GameShell({
       {/* HEADER — Figma: menu @68px, logo, progress @128px */}
       <div
         id="gs-header"
-        className="relative z-[30] flex-shrink-0"
+        className="relative z-60 shrink-0"
         style={{ height: SHELL_HEADER_HEIGHT, opacity: 0 }}
       >
-        <button
-          type="button"
-          className="absolute cursor-pointer border-0 bg-transparent p-0"
-          style={{
-            top: SHELL_MENU_TOP,
-            left: SHELL_PANEL_INSET_X,
-          }}
-          aria-label="Menu"
-        >
-          <span
-            className="block"
-            style={{
-              width: SHELL_MENU_WIDTH,
-              height: SHELL_MENU_BAR_HEIGHT,
-              backgroundColor: "#1A1A1A",
-            }}
-          />
-          <span
-            className="block"
-            style={{
-              width: SHELL_MENU_WIDTH,
-              height: SHELL_MENU_BAR_HEIGHT,
-              marginTop: SHELL_MENU_BAR_GAP,
-              backgroundColor: "#1A1A1A",
-            }}
-          />
-        </button>
-
         <div
+          id="gs-site-logo"
           className="absolute left-1/2 flex -translate-x-1/2 items-center justify-center"
           style={{
             top: SHELL_LOGO_TOP,
             width: SHELL_LOGO_WIDTH,
             height: SHELL_LOGO_HEIGHT,
             backgroundColor: "#C4C4C4",
+            zIndex: 60,
           }}
         >
           <span
@@ -318,7 +288,11 @@ export function GameShell({
             </span>
           </div>
 
-          <div id="gs-score-digits" className="flex" style={{ width: `${panelWidth}px` }}>
+          <div
+            id="gs-score-digits"
+            className="flex"
+            style={{ width: `${panelWidth}px` }}
+          >
             {String(score)
               .padStart(scoreDigits, "0")
               .split("")
@@ -359,10 +333,7 @@ export function GameShell({
         </div>
 
         {children ? (
-          <div
-            className="absolute inset-0"
-            style={{ zIndex: SHELL_GAME_Z }}
-          >
+          <div className="absolute inset-0" style={{ zIndex: SHELL_GAME_Z }}>
             {children({
               score,
               round,
@@ -383,14 +354,21 @@ export function GameShell({
       </div>
 
       {/* Footer */}
-      <div className="absolute bottom-4 flex flex-col items-end" style={{ right: SHELL_PANEL_INSET_X }}>
+      <div
+        id="gs-site-footer"
+        className="absolute bottom-4 flex flex-col items-end gap-0.5"
+        style={{ right: SHELL_PANEL_INSET_X, zIndex: 60 }}
+      >
         <span className="text-[9px] text-[#999]">created by</span>
-        <span
-          className="text-[11px] text-[#666]"
-          style={{ fontFamily: "var(--font-planc), serif", fontWeight: 700 }}
+        <a
+          href="https://studyo.co"
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label="+Stüdyo"
         >
-          #Sideyo
-        </span>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logo.svg" alt="+Stüdyo" width={53} height={13} />
+        </a>
       </div>
     </div>
   );

@@ -238,6 +238,12 @@ export default function OnboardingPage() {
               onGameComplete={handleGameComplete}
               round={round}
               timeLeft={timeLeft}
+              {...(activeGame.resetKey === "optical-panic"
+                ? { sequenceIndex: attemptIndex }
+                : {})}
+              {...(activeGame.resetKey === "retina-check"
+                ? { sequenceIndex: attemptIndex }
+                : {})}
               {...(activeGame.resetKey === "untitled-project"
                 ? { endGame }
                 : {})}

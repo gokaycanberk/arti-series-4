@@ -6,6 +6,10 @@ import ArrowKeycap, { type ArrowKeycapHandle } from "@/components/ArrowKeycap";
 import { GameDescBox, DESC_BOX_LEFT, DESC_BOX_TOP } from "@/components/GameDescBox";
 import ScoreFlyPopup from "@/components/games/ScoreFlyPopup";
 import { scoreFromDistance } from "@/components/games/scoreUtils";
+import {
+  pickOpticalPanicRound,
+  type OpticalPanicRound,
+} from "@/lib/opticalPanicWords";
 
 interface OpticalPanicProps {
   gameKey: string;
@@ -15,16 +19,11 @@ interface OpticalPanicProps {
   onGameStart: () => void;
   addRoundScore: (points: number) => void;
   onGameComplete?: () => void;
+  /** Maraton / test: 0=MIND, 1=HEART, 2=FLAIR */
+  sequenceIndex?: number;
   round: number;
   timeLeft: number;
 }
-
-const WORDS = [
-  { word: "LOREM", missingIndex: 1 },
-  { word: "BRAND", missingIndex: 2 },
-  { word: "THEME", missingIndex: 3 },
-  { word: "CROWN", missingIndex: 2 },
-];
 
 type Phase = "waiting" | "intro" | "playing" | "landed";
 
@@ -53,11 +52,16 @@ export default function OpticalPanic({
   onGameStart,
   addRoundScore,
   onGameComplete,
+  sequenceIndex,
   round,
   timeLeft,
 }: OpticalPanicProps) {
   const [phase, setPhase] = useState<Phase>("waiting");
-  const [currentWord, setCurrentWord] = useState(WORDS[0]!);
+  const [currentWord, setCurrentWord] = useState<OpticalPanicRound>(() =>
+    pickOpticalPanicRound(
+      sequenceIndex !== undefined ? { sequenceIndex } : undefined,
+    ),
+  );
   const [landed, setLanded] = useState(false);
   const [flyScore, setFlyScore] = useState<number | null>(null);
 
@@ -87,7 +91,7 @@ export default function OpticalPanic({
     onGameStartRef.current = onGameStart;
   });
 
-  const FALL_DURATION = 10;
+  const FALL_DURATION = 13;
   const STEP_SIZE = 2;
   const RED_REVEAL_DELAY = 3000;
   const SCORE_REVEAL_DELAY = 200;
@@ -166,8 +170,11 @@ export default function OpticalPanic({
   }, [syncFallingRow, trimFontDeadSpace]);
 
   const prepareRound = useCallback(() => {
-    const wordObj = WORDS[Math.floor(Math.random() * WORDS.length)]!;
-    setCurrentWord(wordObj);
+    setCurrentWord(
+      pickOpticalPanicRound(
+        sequenceIndex !== undefined ? { sequenceIndex } : undefined,
+      ),
+    );
     fallingXRef.current =
       (Math.random() > 0.5 ? 1 : -1) * (60 + Math.floor(Math.random() * 90));
     if (correctCharRef.current) {
@@ -213,7 +220,7 @@ export default function OpticalPanic({
     setLanded(false);
     landedRef.current = false;
     setFlyScore(null);
-  }, [getFallStartY]);
+  }, [getFallStartY, sequenceIndex]);
 
   useEffect(() => {
     handleLandRef.current = () => {
@@ -254,6 +261,25 @@ export default function OpticalPanic({
       prepareRound();
       setPhase("intro");
     });
+  }, [shellReady, gameKey, sequenceIndex, prepareRound]);
+
+  useEffect(() => {
+    if (!shellReady || phase !== "intro") return;
+
+    const skipIntro = sequenceIndex !== undefined && sequenceIndex > 0;
+    if (skipIntro) {
+      queueMicrotask(() => {
+        if (descBoxRef.current) {
+          gsap.set(descBoxRef.current, { opacity: 1, y: 0 });
+        }
+        if (controlsRef.current) {
+          gsap.set(controlsRef.current, { opacity: 1, y: 0 });
+        }
+        setPhase("playing");
+        onGameStartRef.current();
+      });
+      return;
+    }
 
     const card = introCardRef.current;
     const descBox = descBoxRef.current;
@@ -303,8 +329,7 @@ export default function OpticalPanic({
     return () => {
       tl.kill();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [shellReady, gameKey]);
+  }, [shellReady, gameKey, phase, sequenceIndex]);
 
   useEffect(() => {
     if (phase === "intro" || phase === "playing") {

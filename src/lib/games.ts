@@ -8,13 +8,23 @@ function defineGame(details: Game): Game {
 /** Tüm mini oyunlar — `order` maraton sırasını belirler (1 tabanlı). */
 export const GAMES = [
   defineGame({
+    id: "optical-panic",
+    name: "OPTICAL PANIC",
+    category: "typography",
+    description:
+      "Use the arrow keys to guide the falling letter into the right spot then press done and let's see how type nerd you really are.",
+    duration: 30,
+    difficulty: "hard",
+    order: 1,
+  }),
+  defineGame({
     id: "kerning-shot",
     name: "Kerning Shot",
     category: "typography",
     description: "Harfi fırlat, doğru kerning dengesini yakala.",
     duration: 30,
     difficulty: "hard",
-    order: 1,
+    order: 2,
   }),
   defineGame({
     id: "curve-control",
@@ -23,7 +33,7 @@ export const GAMES = [
     description: "Eğriyi referansa kilitleyen minimal bir tepki testi.",
     duration: 30,
     difficulty: "medium",
-    order: 2,
+    order: 3,
   }),
   defineGame({
     id: "retina-check",
@@ -33,7 +43,7 @@ export const GAMES = [
       "Pick the shape that's 2px bigger and prove your eyes are unnecessarily calibrated for absolutely no reason.",
     duration: 30,
     difficulty: "hard",
-    order: 3,
+    order: 4,
   }),
   defineGame({
     id: "bezier-brain",
@@ -43,7 +53,7 @@ export const GAMES = [
       "Move each anchor point to its correct position on the path then press done and let's see how type nerd you really are.",
     duration: 60,
     difficulty: "hard",
-    order: 4,
+    order: 5,
   }),
   defineGame({
     id: "glyph-guess",
@@ -52,7 +62,7 @@ export const GAMES = [
     description: "Gizli karakteri tek ipucuyla tahmin et.",
     duration: 25,
     difficulty: "medium",
-    order: 5,
+    order: 6,
   }),
   defineGame({
     id: "rgb-guess",
@@ -61,7 +71,7 @@ export const GAMES = [
     description: "Panele yaklaşarak doğru RGB bileşimini bul.",
     duration: 30,
     difficulty: "hard",
-    order: 6,
+    order: 7,
   }),
   defineGame({
     id: "gradient-angle",
@@ -70,7 +80,7 @@ export const GAMES = [
     description: "Açıyı görsel olarak hizala, mükemmel geçişi yakala.",
     duration: 30,
     difficulty: "medium",
-    order: 7,
+    order: 8,
   }),
   defineGame({
     id: "gradient-guru",
@@ -80,7 +90,7 @@ export const GAMES = [
       "Place the gradient points where you think they belong and trust your totally scientific understanding of gradients.",
     duration: 45,
     difficulty: "medium",
-    order: 8,
+    order: 9,
   }),
   defineGame({
     id: "color-split",
@@ -89,7 +99,7 @@ export const GAMES = [
     description: "Alanı doğru yüzdelik bölgelerle ayır.",
     duration: 28,
     difficulty: "hard",
-    order: 9,
+    order: 10,
   }),
   defineGame({
     id: "color-mix",
@@ -98,7 +108,7 @@ export const GAMES = [
     description: "İki pigmentin karışımını ezberinden üret.",
     duration: 30,
     difficulty: "medium",
-    order: 10,
+    order: 11,
   }),
   defineGame({
     id: "2px-difference",
@@ -108,7 +118,7 @@ export const GAMES = [
       "İki özdeş şekilden boyutu tam 2 px daha küçük olanı seç. Süre bitene kadar en yüksek doğruluk skorunu yakalamaya çalış.",
     duration: 35,
     difficulty: "hard",
-    order: 11,
+    order: 12,
   }),
   defineGame({
     id: "untitled-project",
@@ -118,7 +128,7 @@ export const GAMES = [
       "Save as many files as possible before your computer crashes and humbles your creative confidence.",
     duration: 60,
     difficulty: "easy",
-    order: 12,
+    order: 13,
   }),
   defineGame({
     id: "widow-hunter",
@@ -127,7 +137,7 @@ export const GAMES = [
     description: "Dökümdeki yalnız satırları avla, tipografiyi koru.",
     duration: 32,
     difficulty: "hard",
-    order: 13,
+    order: 14,
   }),
 ].sort((a, b) => a.order - b.order);
 

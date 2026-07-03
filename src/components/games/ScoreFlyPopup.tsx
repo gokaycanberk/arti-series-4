@@ -14,6 +14,8 @@ interface ScoreFlyPopupProps {
   label?: string | null;
   /** false ise puan yan tarafta kalır, üst skora uçmaz */
   flyToScore?: boolean;
+  /** İniş noktasını yukarı kaydır (px) — skorun scoreboard arkasına ulaşması için */
+  flyTargetLift?: number;
 }
 
 const SCORE_FONT_SIZE = 200;
@@ -82,6 +84,7 @@ export default function ScoreFlyPopup({
   targetId = "gs-score-digits",
   label: labelOverride,
   flyToScore = true,
+  flyTargetLift = 0,
 }: ScoreFlyPopupProps) {
   const mainRef = useRef<HTMLDivElement>(null);
   const ghostRefs = useRef<(HTMLDivElement | null)[]>([]);
@@ -150,7 +153,7 @@ export default function ScoreFlyPopup({
 
     const targetRect = target.getBoundingClientRect();
     const targetX = targetRect.left + targetRect.width / 2;
-    const targetY = targetRect.top + targetRect.height / 2;
+    const targetY = targetRect.top + targetRect.height * 0.35 - flyTargetLift;
 
     const deltaX = targetX - originX;
     const deltaY = targetY - originY;
@@ -231,7 +234,7 @@ export default function ScoreFlyPopup({
       tl.kill();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- tek seferlik animasyon
-  }, [points, targetId, flyToScore]);
+  }, [points, targetId, flyToScore, flyTargetLift]);
 
   return (
     <div className="fixed inset-0 z-40 pointer-events-none overflow-visible">

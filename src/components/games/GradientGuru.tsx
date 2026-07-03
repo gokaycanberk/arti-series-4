@@ -717,6 +717,7 @@ export default function GradientGuru({
           anchorRef={stageRef}
           origin={scoreOrigin}
           variant="gradient-guru"
+          flyTargetLift={100}
           onScoreLand={() => addRoundScore(pendingScore.current)}
           onComplete={() => {
             queueMicrotask(() => {

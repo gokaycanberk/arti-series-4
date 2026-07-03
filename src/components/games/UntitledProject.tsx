@@ -420,6 +420,7 @@ export default function UntitledProject({
           anchorRef={playfieldRef}
           origin={scoreOrigin}
           variant="gradient-guru"
+          flyTargetLift={100}
           onScoreLand={handleScoreLand}
           onComplete={handleScoreFlyComplete}
         />

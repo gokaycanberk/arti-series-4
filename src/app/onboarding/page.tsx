@@ -37,10 +37,7 @@ type MarathonEntry = {
   }>;
 };
 
-/**
- * Maraton sırası — 5 ana oyun, şimdilik her biri 1 kez.
- * (3'lü tekrarlar + harf/gradient varyasyonu sonraki faza.)
- */
+/** Maraton sırası — avatar seçimi sonrası 4 oyun ×3, Untitled ×1 (30 sn). */
 const MARATHON_GAMES: MarathonEntry[] = [
   {
     resetKey: "optical-panic",
@@ -69,7 +66,7 @@ const MARATHON_GAMES: MarathonEntry[] = [
   {
     resetKey: "untitled-project",
     name: "UNTITLED-1",
-    duration: 5,
+    duration: 30,
     Component: UntitledProject,
   },
 ];
@@ -220,7 +217,6 @@ export default function OnboardingPage() {
 
       {(phase === "game" || phase === "results") && (
         <GameShell
-          key={`marathon-${gameIndex}-${attemptIndex}`}
           resetKey={`${activeGame.resetKey}-${gameIndex}-${attemptIndex}`}
           gameName={activeGame.name}
           description={activeGameMeta?.description}
@@ -254,6 +250,9 @@ export default function OnboardingPage() {
                 ? { sequenceIndex: attemptIndex }
                 : {})}
               {...(activeGame.resetKey === "retina-check"
+                ? { sequenceIndex: attemptIndex }
+                : {})}
+              {...(activeGame.resetKey === "bezier-brain"
                 ? { sequenceIndex: attemptIndex }
                 : {})}
               {...(activeGame.resetKey === "gradient-guru"

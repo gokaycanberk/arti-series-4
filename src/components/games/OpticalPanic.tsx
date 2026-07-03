@@ -698,6 +698,7 @@ export default function OpticalPanic({
           key={flyScore}
           points={flyScore}
           anchorRef={scoreAnchorRef}
+          flyTargetLift={100}
           onComplete={() => handleScoreFlyComplete(flyScore)}
         />
       )}

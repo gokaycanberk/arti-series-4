@@ -126,7 +126,7 @@ export const GAMES = [
     category: "structure",
     description:
       "Save as many files as possible before your computer crashes and humbles your creative confidence.",
-    duration: 60,
+    duration: 30,
     difficulty: "easy",
     order: 13,
   }),

@@ -588,6 +588,7 @@ export default function RetinaCheck({
           key={flyScore}
           points={flyScore}
           anchorRef={scoreAnchorRef}
+          flyTargetLift={100}
           onComplete={() => handleScoreFlyComplete(flyScore)}
         />
       )}

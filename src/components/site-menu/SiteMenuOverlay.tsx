@@ -253,6 +253,8 @@ export function SiteMenuOverlay() {
                 left: MENU_LEFT,
                 top: `${topPct}vh`,
                 fontSize: `clamp(72px, ${(MENU_FONT_SIZE / 1080) * 100}vh, ${MENU_FONT_SIZE}px)`,
+                opacity: 0,
+                transform: "translateX(-120vw)",
                 pointerEvents:
                   view === "menu" && itemsInteractive ? "auto" : "none",
               }}

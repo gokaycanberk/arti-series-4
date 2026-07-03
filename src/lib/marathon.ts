@@ -1,8 +1,8 @@
-/** Maraton: 5 ana oyun — geçici olarak her biri 1 kez (tekrarlar sonraki faz). */
+/** Maraton: 5 ana oyun. İlk dört oyun ×3, son oyun ×1. */
 export const MARATHON_MAIN_GAMES = 5;
 
-/** Oyun başına tur sayısı — Optical Panic + Gradient Guru: 3 tur */
-export const MARATHON_REPEATS: readonly number[] = [3, 1, 1, 3, 1];
+/** Oyun başına tur sayısı — son oyun (Untitled) hariç hepsi 3 tur */
+export const MARATHON_REPEATS: readonly number[] = [3, 3, 3, 3, 1];
 
 export const MARATHON_TOTAL_STEPS = MARATHON_REPEATS.reduce(
   (sum, n) => sum + n,

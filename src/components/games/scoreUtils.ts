@@ -76,7 +76,7 @@ export function getScoreLabel(points: number): string | null {
   return null;
 }
 
-/** Untitled Project: kaydedilen sekme sayısı → 0–1000 puan */
+/** Untitled Project: kaydedilen sekme sayısı → 0–1000 puan (~14 kayıt = max) */
 export function scoreFromUntitledSaves(saved: number): number {
-  return Math.min(saved * 50, 1000);
+  return Math.min(saved * 75, 1000);
 }

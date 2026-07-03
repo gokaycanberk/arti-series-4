@@ -1,7 +1,7 @@
 "use client";
 
 import gsap from "gsap";
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useLayoutEffect, useState, useCallback, useRef } from "react";
 import { GameDescBox } from "@/components/GameDescBox";
 import { MarathonProgressBar } from "@/components/MarathonProgressBar";
 import {
@@ -89,8 +89,10 @@ export function GameShell({
     return () => clearInterval(interval);
   }, [timeLeft, isPlaying]);
 
-  // Yeni oyun — skor maratondan gelir; shell girişi yalnızca ilk seferde oynar
-  useEffect(() => {
+  // Yeni oyun — skor maratondan gelir; shell girişi yalnızca ilk seferde oynar.
+  // useLayoutEffect: reset, child'ın onGameStart (passive) efektinden ÖNCE
+  // çalışsın; aksi halde isPlaying yeniden false'a çekilip timer başlamıyor.
+  useLayoutEffect(() => {
     setScore(initialScoreRef.current);
     setRound(initialRound);
     setTimeLeft(duration);

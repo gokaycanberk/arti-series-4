@@ -21,6 +21,8 @@ interface ScoreSideRevealProps {
   label?: string | null;
   /** Gradient Guru: ortada alta katmanlı reveal → devrilerek sağ üste uçuş */
   variant?: "default" | "gradient-guru";
+  /** İniş noktasını yukarı kaydır (px) — skorun scoreboard arkasına ulaşması için */
+  flyTargetLift?: number;
 }
 
 const DEFAULT_FONT = 132;
@@ -142,6 +144,7 @@ export default function ScoreSideReveal({
   targetId = "gs-score-digits",
   label: labelOverride,
   variant = "default",
+  flyTargetLift = 0,
 }: ScoreSideRevealProps) {
   const isGuru = variant === "gradient-guru";
   const fontSize = isGuru ? GURU_FONT : DEFAULT_FONT;
@@ -261,6 +264,8 @@ export default function ScoreSideReveal({
           flyParams.skipFly = true;
           return;
         }
+
+        flyParams.target.y -= flyTargetLift;
 
         const { origin, target } = flyParams;
 
@@ -423,6 +428,7 @@ export default function ScoreSideReveal({
     holdDuration,
     flyDuration,
     arcLift,
+    flyTargetLift,
   ]);
 
   return (

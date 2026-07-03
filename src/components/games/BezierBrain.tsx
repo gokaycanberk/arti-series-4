@@ -1,13 +1,21 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import gsap from "gsap";
 import { GameDescBox } from "@/components/GameDescBox";
 import DoneKeycap from "@/components/DoneKeycap";
 import ScoreSideReveal from "@/components/games/ScoreSideReveal";
+import {
+  getBezierCharacter,
+  type BezierCharacter,
+  type BezierPointDef,
+  type BezierRail as Rail,
+} from "@/lib/bezierBrainVariations";
 
 interface BezierBrainProps {
   gameKey: string;
+  /** Karakter seçimi: 0=S, 1=2, … */
+  sequenceIndex?: number;
   isPlaying: boolean;
   shellReady: boolean;
   onAnswer: (correct: boolean) => void;
@@ -20,14 +28,7 @@ interface BezierBrainProps {
 
 type Phase = "waiting" | "intro" | "playing" | "ended";
 
-type Rail = "outer" | "inner";
-
-interface PointDef {
-  x: number;
-  y: number;
-  fixed: boolean;
-  rail: Rail;
-}
+type PointDef = BezierPointDef;
 
 interface GamePoint {
   correctX: number;
@@ -40,41 +41,6 @@ interface GamePoint {
   rail: Rail;
 }
 
-const S_PATH =
-  "M267.877 354L188.737 334.65C78.8169 306.51 23.4169 255.51 23.4169 166.69C23.4169 77.87 106.947 0.5 230.057 0.5C341.737 0.5 438.467 59.42 449.017 180.77H370.757C364.597 106.02 308.317 67.33 230.057 67.33C137.727 67.33 99.0269 116.57 99.0269 165.82C99.0269 219.46 133.327 248.48 213.347 267.83L295.127 287.18C408.567 315.32 467.487 370.72 467.487 458.66C467.487 558.91 377.787 638.93 242.367 638.93C99.9069 638.93 9.33687 557.15 0.536865 433.16H77.0469C87.5969 526.37 154.427 572.1 242.367 572.1C325.027 572.1 391.857 531.65 391.857 464.82C391.857 403.27 354.927 375.13 267.867 354.02L267.877 354Z";
-
-const VB_PAD = 14;
-const VIEWBOX = `${-VB_PAD} ${-VB_PAD} ${468 + VB_PAD * 2} ${640 + VB_PAD * 2}`;
-/** S.svg game letter vs Sfinal.svg reference points — different viewBox sizes */
-const GAME_VB = { w: 468, h: 640 };
-const SFINAL_VB = { w: 226, h: 305 };
-
-/** S.svg cap köşeleri — path H segment uçları, ölçeklenmez */
-const FIXED_CORNERS: PointDef[] = [
-  { x: 449.017, y: 180.77, fixed: true, rail: "outer" },
-  { x: 370.757, y: 180.77, fixed: true, rail: "inner" },
-  { x: 0.536865, y: 433.16, fixed: true, rail: "outer" },
-  { x: 77.0469, y: 433.16, fixed: true, rail: "inner" },
-];
-
-/** Sfinal.svg siyah noktalar — game viewBox'a ölçeklenir */
-const MOVABLE_POINTS: PointDef[] = [
-  { x: 111.2, y: 4.622, fixed: false, rail: "inner" },
-  { x: 111.2, y: 35.511, fixed: false, rail: "inner" },
-  { x: 15.687, y: 81.439, fixed: false, rail: "inner" },
-  { x: 50.643, y: 81.032, fixed: false, rail: "inner" },
-  { x: 103.481, y: 128.181, fixed: false, rail: "inner" },
-  { x: 141.279, y: 137.119, fixed: false, rail: "outer" },
-  { x: 92.098, y: 159.069, fixed: false, rail: "inner" },
-  { x: 128.681, y: 168.008, fixed: false, rail: "outer" },
-  { x: 116.894, y: 268.807, fixed: false, rail: "inner" },
-  { x: 110.936, y: 299.696, fixed: false, rail: "inner" },
-  { x: 185.987, y: 219.219, fixed: false, rail: "outer" },
-  { x: 220.938, y: 216.377, fixed: false, rail: "outer" },
-];
-
-const SFINAL_POINTS: PointDef[] = [...FIXED_CORNERS, ...MOVABLE_POINTS];
-
 const DESC_COPY = {
   title: "Bezier Brain",
   body: "Move each anchor point to its correct position on the path then press done and let's see how type nerd you really are.",
@@ -86,17 +52,17 @@ const GHOST_FADE_DURATION = 1.4;
 const SNAP_START_DELAY = 0.6;
 const SNAP_DURATION = 2.4;
 const SNAP_STAGGER = 0.1;
-const REVEAL_HOLD = 2.8;
+const REVEAL_HOLD = 0.4;
 const SHRINK_DURATION = 0.9;
 const SHRINK_TARGET = 0.36;
 const VANISH_AT_SCALE = 0.42;
 const T_GAP = 0.008;
 const HINT_WINDOW = 0.14;
 
-function scalePoint(p: PointDef): PointDef {
+function scalePoint(p: PointDef, char: BezierCharacter): PointDef {
   return {
-    x: (p.x / SFINAL_VB.w) * GAME_VB.w,
-    y: (p.y / SFINAL_VB.h) * GAME_VB.h,
+    x: (p.x / char.pointsViewBox.w) * char.gameViewBox.w,
+    y: (p.y / char.pointsViewBox.h) * char.gameViewBox.h,
     fixed: p.fixed,
     rail: p.rail,
   };
@@ -174,9 +140,14 @@ function syncPointsPositions(
   return list.map((p) => applyCurrentPos(path, total, p));
 }
 
-function buildGamePoints(path: SVGPathElement, total: number): GamePoint[] {
-  return SFINAL_POINTS.map((def) => {
-    const scaled = def.fixed ? def : scalePoint(def);
+function buildGamePoints(
+  path: SVGPathElement,
+  total: number,
+  char: BezierCharacter,
+): GamePoint[] {
+  const defs: PointDef[] = [...char.fixedCorners, ...char.movablePoints];
+  return defs.map((def) => {
+    const scaled = def.fixed ? def : scalePoint(def, char);
     const correctT = projectToPath(path, total, scaled.x, scaled.y);
 
     if (def.fixed) {
@@ -278,6 +249,7 @@ function posFromT(
 
 export default function BezierBrain({
   gameKey,
+  sequenceIndex = 0,
   isPlaying,
   shellReady,
   onAnswer,
@@ -286,6 +258,16 @@ export default function BezierBrain({
   onGameComplete,
   timeLeft,
 }: BezierBrainProps) {
+  const character = useMemo(
+    () => getBezierCharacter(sequenceIndex),
+    [sequenceIndex],
+  );
+  const viewBox = useMemo(() => {
+    const { w, h } = character.gameViewBox;
+    const pad = character.viewBoxPad;
+    return `${-pad} ${-pad} ${w + pad * 2} ${h + pad * 2}`;
+  }, [character]);
+
   const [phase, setPhase] = useState<Phase>("waiting");
   const [points, setPoints] = useState<GamePoint[]>([]);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
@@ -336,7 +318,7 @@ export default function BezierBrain({
     const total = path.getTotalLength();
     totalLengthRef.current = total;
 
-    const base = buildGamePoints(path, total);
+    const base = buildGamePoints(path, total, character);
     const { introStart, scatterTargets } = buildRoundPoints(base);
     const syncedIntro = syncPointsPositions(path, total, introStart);
     const syncedScatter = syncPointsPositions(path, total, scatterTargets);
@@ -349,7 +331,7 @@ export default function BezierBrain({
     if (letterWrapRef.current) {
       gsap.set(letterWrapRef.current, { scale: 1, opacity: 1 });
     }
-  }, [shellReady, gameKey]);
+  }, [shellReady, gameKey, character]);
 
   const completeRound = useCallback(() => {
     const result = pendingResultRef.current;
@@ -775,24 +757,24 @@ export default function BezierBrain({
 
             <svg
               ref={svgRef}
-              viewBox={VIEWBOX}
+              viewBox={viewBox}
               preserveAspectRatio="xMidYMid meet"
               className="h-full w-auto touch-none"
               onPointerMove={handlePointerMove}
               onPointerUp={handlePointerUp}
               onPointerCancel={handlePointerUp}
               style={{ touchAction: "none", display: "block", overflow: "visible" }}
-              aria-label="Letter S outline"
+              aria-label={`Letter ${character.label} outline`}
             >
               <g ref={letterRef} style={{ opacity: phase === "waiting" ? 0 : 1 }}>
                 <path
-                  d={S_PATH}
+                  d={character.path}
                   fill="#E5E5E5"
                   stroke="none"
                 />
                 <path
                   ref={pathRef}
-                  d={S_PATH}
+                  d={character.path}
                   fill="none"
                   stroke="#1A1A1A"
                   strokeWidth={1.5}
@@ -883,6 +865,8 @@ export default function BezierBrain({
             key={flyScore}
             points={flyScore}
             anchorRef={scoreAnchorRef}
+            variant="gradient-guru"
+            flyTargetLift={100}
             onFlyStart={runLetterExit}
             onScoreLand={() => handleScoreLand(flyScore)}
             onComplete={handleScoreFlyComplete}

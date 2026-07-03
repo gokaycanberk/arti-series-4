@@ -110,17 +110,13 @@ export default function OnboardingPage() {
 
   useEffect(() => {
     useGameStore.getState().hydrateNicknameFromStorage();
+    useGameStore.getState().pickAvatarFace();
   }, []);
-
-  useEffect(() => {
-    if (MARATHON_GAMES[gameIndex]?.resetKey === "gradient-guru") {
-      setGradientSessionPicks(pickGradientGuruSession());
-    }
-  }, [gameIndex]);
 
   const activeGame = MARATHON_GAMES[gameIndex] ?? MARATHON_GAMES[0]!;
   const activeGameMeta = getGameById(activeGame.resetKey);
   const ActiveComponent = activeGame.Component;
+  const avatarFaceSrc = useGameStore((s) => s.avatarFaceSrc);
 
   const handleScoreAdd = useCallback((points: number) => {
     setMarathonScore((prev) => {
@@ -153,7 +149,11 @@ export default function OnboardingPage() {
     }
 
     if (gameIndex < MARATHON_GAMES.length - 1) {
-      setGameIndex((prev) => prev + 1);
+      const nextIndex = gameIndex + 1;
+      if (MARATHON_GAMES[nextIndex]?.resetKey === "gradient-guru") {
+        setGradientSessionPicks(pickGradientGuruSession());
+      }
+      setGameIndex(nextIndex);
       setAttemptIndex(0);
       return;
     }
@@ -178,6 +178,7 @@ export default function OnboardingPage() {
     setAttemptIndex(0);
     setCompletedRounds(0);
     setMarathonScore(0);
+    setGradientSessionPicks(pickGradientGuruSession());
     marathonScoreRef.current = 0;
     useGameStore.getState().resetMarathon();
   }, [devStartIndex]);
@@ -193,7 +194,7 @@ export default function OnboardingPage() {
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         id="face-reveal"
-        src="/Avatar_Set/face/face.png"
+        src={avatarFaceSrc}
         alt="face"
         className="fixed z-[9998] pointer-events-none"
         style={{

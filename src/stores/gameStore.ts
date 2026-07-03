@@ -3,6 +3,7 @@
 import { create } from "zustand";
 
 import { TOTAL_GAMES } from "@/lib/games";
+import { DEFAULT_AVATAR_FACE, pickRandomAvatarFace } from "@/lib/avatarFaces";
 import { averageScores } from "@/lib/scoring";
 import type { PlayMode } from "@/types";
 
@@ -10,10 +11,13 @@ const NICKNAME_STORAGE_KEY = "arti-series-4-nickname";
 
 export interface GameStoreState {
   nickname: string | null;
+  /** Giriş animasyonunda seçilen tam yüz görseli */
+  avatarFaceSrc: string;
   mode: PlayMode | null;
   marathonScores: number[];
   currentGameIndex: number;
   setNickname: (name: string) => void;
+  pickAvatarFace: () => void;
   hydrateNicknameFromStorage: () => void;
   setMode: (mode: PlayMode) => void;
   addMarathonScore: (score: number) => void;
@@ -31,6 +35,7 @@ export const selectTotalMarathonScore = selectMarathonAverage;
 
 export const useGameStore = create<GameStoreState>((set) => ({
   nickname: null,
+  avatarFaceSrc: DEFAULT_AVATAR_FACE,
   mode: null,
   marathonScores: [],
   currentGameIndex: 0,
@@ -43,6 +48,8 @@ export const useGameStore = create<GameStoreState>((set) => ({
     }
     set({ nickname: trimmed });
   },
+
+  pickAvatarFace: () => set({ avatarFaceSrc: pickRandomAvatarFace() }),
 
   hydrateNicknameFromStorage: () => {
     if (typeof window === "undefined") return;
@@ -66,6 +73,7 @@ export const useGameStore = create<GameStoreState>((set) => ({
     set({
       marathonScores: [],
       currentGameIndex: 0,
+      avatarFaceSrc: pickRandomAvatarFace(),
     }),
 
   setCurrentGameIndex: (index: number) =>

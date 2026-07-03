@@ -48,6 +48,7 @@ export default function HomePage() {
   const welcomeRef = useRef<HTMLHeadingElement>(null);
   const totheRef = useRef<HTMLHeadingElement>(null);
   const logoRef = useRef<HTMLImageElement>(null);
+  const topLogoRef = useRef<HTMLImageElement>(null);
   const rotatingLineRef = useRef<HTMLDivElement>(null);
 
   const [introComplete, setIntroComplete] = useState(false);
@@ -85,6 +86,7 @@ export default function HomePage() {
     const welcome = welcomeRef.current;
     const tothe = totheRef.current;
     const logo = logoRef.current;
+    const topLogo = topLogoRef.current;
     const rotatingLine = rotatingLineRef.current;
     if (!intro || !welcome || !tothe || !logo || !rotatingLine) return;
 
@@ -111,18 +113,27 @@ export default function HomePage() {
       rotation: 0,
       transformOrigin: "center center",
     });
+    if (topLogo) {
+      gsap.set(topLogo, { xPercent: -50, y: -140, opacity: 0 });
+    }
+
+    // Figma Desktop-213 (1080 çerçeve) oranlarına göre — hiçbir öge çakışmaz
+    const vh = window.innerHeight;
+    const welcomeY = -0.33 * vh;
+    const totheY = -0.09 * vh;
+    const logoY = 0.2 * vh;
 
     const tl = gsap.timeline({ delay: 1.2 });
 
     tl.to(welcome, {
-      y: -120,
+      y: welcomeY,
       duration: 2,
       ease: "power3.inOut",
     })
       .to(
         tothe,
         {
-          y: 100,
+          y: totheY,
           duration: 2,
           ease: "power3.inOut",
         },
@@ -131,7 +142,7 @@ export default function HomePage() {
       .to(
         logo,
         {
-          y: 220,
+          y: logoY,
           rotation: 0,
           scale: 1,
           duration: 2,
@@ -158,6 +169,20 @@ export default function HomePage() {
           setIntroComplete(true);
         },
       });
+
+    // Ana logo yukarıdan iner — intro paneli aşağı kayarken belirir
+    if (topLogo) {
+      tl.to(
+        topLogo,
+        {
+          y: 0,
+          opacity: 1,
+          duration: 0.9,
+          ease: "power3.out",
+        },
+        "<",
+      );
+    }
 
     return () => {
       tl.kill();
@@ -214,44 +239,52 @@ export default function HomePage() {
           aria-hidden={introComplete}
         >
           <div className="absolute inset-0 flex items-center justify-center">
-            <h1
-              ref={welcomeRef}
-              id="welcome-text"
-              className="font-planc absolute left-1/2 top-1/2 select-none whitespace-nowrap text-center font-bold text-[#FFFFFF] will-change-transform"
-              style={{
-                fontSize: "clamp(80px, 18vw, 270px)",
-                lineHeight: 0.93,
-                letterSpacing: "0em",
-              }}
-            >
-              WELCOME
-            </h1>
-
-            <h2
-              ref={totheRef}
-              id="tothe-text"
-              className="font-planc absolute left-1/2 top-1/2 select-none whitespace-nowrap text-center font-bold text-[#FFFFFF] will-change-transform"
-              style={{
-                fontSize: "clamp(80px, 18vw, 270px)",
-                lineHeight: 0.93,
-                letterSpacing: "0em",
-              }}
-            >
-              TO THE
-            </h2>
-
             {/* eslint-disable-next-line @next/next/no-img-element -- GSAP animates this logo directly */}
             <img
               ref={logoRef}
               id="intro-logo"
-              src="/mainpagelogo.png"
-              alt="Logo"
+              src="/layers/goodeyelogo.gif"
+              alt="Good Eye Club"
               className="pointer-events-none absolute left-1/2 top-1/2 z-10 select-none will-change-transform"
               style={{
-                width: "clamp(150px, 25vw, 380px)",
+                width: "clamp(220px, 32vw, 500px)",
+                height: "auto",
                 transform: "translate(-50%, -50%) rotate(-25deg) scale(1.4)",
               }}
             />
+
+            {/* Yazı grubu tek katman olarak GIF ile difference alır;
+                grup içinde WELCOME/TO THE birbiriyle etkileşmez */}
+            <div
+              className="absolute inset-0 z-20"
+              style={{ mixBlendMode: "difference", isolation: "isolate" }}
+            >
+              <h1
+                ref={welcomeRef}
+                id="welcome-text"
+                className="font-planc absolute left-1/2 top-1/2 select-none whitespace-nowrap text-center font-bold text-[#FFFFFF] will-change-transform"
+                style={{
+                  fontSize: "clamp(56px, min(14vw, 22vh), 210px)",
+                  lineHeight: 0.93,
+                  letterSpacing: "0em",
+                }}
+              >
+                WELCOME
+              </h1>
+
+              <h2
+                ref={totheRef}
+                id="tothe-text"
+                className="font-planc absolute left-1/2 top-1/2 select-none whitespace-nowrap text-center font-bold text-[#FFFFFF] will-change-transform"
+                style={{
+                  fontSize: "clamp(56px, min(14vw, 22vh), 210px)",
+                  lineHeight: 0.93,
+                  letterSpacing: "0em",
+                }}
+              >
+                TO THE
+              </h2>
+            </div>
           </div>
 
           <div
@@ -283,6 +316,19 @@ export default function HomePage() {
       )}
 
       <section className="relative z-1 min-h-screen w-full overflow-x-clip bg-[#E8E8E8] px-6 py-24 md:px-10">
+        {/* eslint-disable-next-line @next/next/no-img-element -- GSAP animates this logo directly */}
+        <img
+          ref={topLogoRef}
+          src="/layers/goodeyelogo.gif"
+          alt="Good Eye Club"
+          className="pointer-events-none fixed left-1/2 top-5 z-40 select-none will-change-transform"
+          style={{
+            width: "clamp(72px, 9vw, 120px)",
+            height: "auto",
+            transform: "translateX(-50%)",
+          }}
+        />
+
         {PARALLAX_LAYERS.map((layer, index) => (
           <div
             key={`${layer.src}-${index}`}

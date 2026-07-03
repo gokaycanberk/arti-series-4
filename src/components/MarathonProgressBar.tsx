@@ -5,6 +5,7 @@ import {
   marathonAvatarPercent,
   marathonSubdivisions,
 } from "@/lib/marathon";
+import { useGameStore } from "@/stores/gameStore";
 
 interface MarathonProgressBarProps {
   /** Tamamlanan maraton adımı (0 … totalSteps) */
@@ -17,6 +18,7 @@ const AVATAR_SIZE = 42;
 const INNER_TICK_HEIGHT = 6;
 
 export function MarathonProgressBar({ step }: MarathonProgressBarProps) {
+  const avatarFaceSrc = useGameStore((s) => s.avatarFaceSrc);
   const avatarLeft = marathonAvatarPercent(step);
 
   return (
@@ -82,7 +84,7 @@ export function MarathonProgressBar({ step }: MarathonProgressBarProps) {
       >
         {/* eslint-disable-next-line @next/next/no-img-element -- GSAP progress avatar */}
         <img
-          src="/Avatar_Set/face/face.png"
+          src={avatarFaceSrc}
           alt=""
           className="rounded-full border border-[#1A1A1A] bg-[#E5E5E5]"
           style={{ width: AVATAR_SIZE, height: AVATAR_SIZE }}

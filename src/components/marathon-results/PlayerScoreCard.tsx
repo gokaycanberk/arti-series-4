@@ -10,6 +10,7 @@ import {
   PLAYER_CARD_TOP_H,
   PLAYER_CARD_W,
 } from "@/components/marathon-results/constants";
+import { useGameStore } from "@/stores/gameStore";
 
 export interface PlayerScoreCardRefs {
   root?: RefObject<HTMLDivElement | null>;
@@ -37,6 +38,7 @@ export function PlayerScoreCard({
   className = "",
   refs,
 }: PlayerScoreCardProps) {
+  const avatarFaceSrc = useGameStore((s) => s.avatarFaceSrc);
   const displayHex = formatHex(hex);
   const scoreText = String(score);
 
@@ -59,7 +61,7 @@ export function PlayerScoreCard({
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src="/Avatar_Set/face/face.png"
+          src={avatarFaceSrc}
           alt=""
           className="rounded-full border border-[#1A1A1A] bg-[#E5E5E5] object-cover"
           style={{ width: PLAYER_AVATAR_PX, height: PLAYER_AVATAR_PX }}

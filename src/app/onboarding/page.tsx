@@ -12,6 +12,7 @@ import UntitledProject from "@/components/games/UntitledProject";
 import { MarathonResults } from "@/components/marathon-results/MarathonResults";
 import { computeMarathonStep, getMarathonRepeats } from "@/lib/marathon";
 import { getMarathonDevConfig } from "@/lib/marathonDev";
+import { pickGradientGuruSession } from "@/lib/gradientGuruVariations";
 import { getGameById } from "@/lib/games";
 import { useGameStore } from "@/stores/gameStore";
 
@@ -31,6 +32,8 @@ type MarathonEntry = {
     onGameComplete?: () => void;
     round: number;
     timeLeft: number;
+    sequenceIndex?: number;
+    sessionPicks?: readonly number[];
   }>;
 };
 
@@ -104,10 +107,19 @@ export default function OnboardingPage() {
       ? MARATHON_DEV.mockScore
       : 0,
   );
+  const [gradientSessionPicks, setGradientSessionPicks] = useState(() =>
+    pickGradientGuruSession(),
+  );
 
   useEffect(() => {
     useGameStore.getState().hydrateNicknameFromStorage();
   }, []);
+
+  useEffect(() => {
+    if (MARATHON_GAMES[gameIndex]?.resetKey === "gradient-guru") {
+      setGradientSessionPicks(pickGradientGuruSession());
+    }
+  }, [gameIndex]);
 
   const activeGame = MARATHON_GAMES[gameIndex] ?? MARATHON_GAMES[0]!;
   const activeGameMeta = getGameById(activeGame.resetKey);
@@ -243,6 +255,12 @@ export default function OnboardingPage() {
                 : {})}
               {...(activeGame.resetKey === "retina-check"
                 ? { sequenceIndex: attemptIndex }
+                : {})}
+              {...(activeGame.resetKey === "gradient-guru"
+                ? {
+                    sequenceIndex: attemptIndex,
+                    sessionPicks: gradientSessionPicks,
+                  }
                 : {})}
               {...(activeGame.resetKey === "untitled-project"
                 ? { endGame }

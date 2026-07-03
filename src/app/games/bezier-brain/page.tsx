@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { Suspense, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 
 import { GameShell } from "@/components/GameShell";
@@ -26,13 +26,6 @@ function BezierBrainPageContent() {
 
   const [roundIndex, setRoundIndex] = useState(0);
   const [replayKey, setReplayKey] = useState(0);
-
-  useEffect(() => {
-    if (urlPinnedIndex !== null) {
-      setRoundIndex(urlPinnedIndex);
-      setReplayKey((k) => k + 1);
-    }
-  }, [urlPinnedIndex]);
 
   const charIndex =
     urlPinnedIndex ??

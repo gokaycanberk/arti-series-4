@@ -386,7 +386,6 @@ export default function RetinaCheck({
     const right = rightShapeRef.current;
     const leftW = biggerSide === "left" ? BASE_SIZE + SIZE_DIFF : BASE_SIZE;
     const rightW = biggerSide === "right" ? BASE_SIZE + SIZE_DIFF : BASE_SIZE;
-    const maxH = Math.max(leftW, rightW);
 
     if (left) {
       gsap.set(left, { width: leftW, height: leftW });

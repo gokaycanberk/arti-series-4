@@ -58,6 +58,115 @@ const SHRINK_TARGET = 0.36;
 const VANISH_AT_SCALE = 0.42;
 const T_GAP = 0.008;
 const HINT_WINDOW = 0.14;
+/** Sürükleme: mevcut konum etrafındaki arama penceresi (logical t birimi) */
+const DRAG_WINDOW = 0.05;
+
+/* ────────── Path geometry: contour tespiti + dikiş döndürme ────────── */
+
+interface Contour {
+  /** logical t aralığı */
+  start: number;
+  end: number;
+  /** contour içi parametre döndürme (0-1) — dikişi boş bölgeye taşır */
+  offset: number;
+}
+
+interface PathGeometry {
+  contours: Contour[];
+  /** logical t → fiziksel arc fraction */
+  frac: (t: number) => number;
+}
+
+const IDENTITY_FRAC = (t: number) => t;
+
+/** Alt-yol (subpath) sınırlarını arc-length sıçramalarından bul */
+function detectContours(
+  path: SVGPathElement,
+  total: number,
+): { start: number; end: number }[] {
+  if (total === 0) return [{ start: 0, end: 1 }];
+  const steps = 2000;
+  const stepLen = total / steps;
+  const jumpThreshold = Math.max(8, stepLen * 8);
+
+  const boundaries: number[] = [0];
+  let prev = path.getPointAtLength(0);
+  for (let i = 1; i <= steps; i += 1) {
+    const t = i / steps;
+    const pt = path.getPointAtLength(t * total);
+    const d = Math.hypot(pt.x - prev.x, pt.y - prev.y);
+    if (d > jumpThreshold) boundaries.push(t);
+    prev = pt;
+  }
+  boundaries.push(1);
+
+  const ranges: { start: number; end: number }[] = [];
+  for (let i = 0; i < boundaries.length - 1; i += 1) {
+    const start = boundaries[i]!;
+    const end = boundaries[i + 1]!;
+    if (end - start > 0.01) ranges.push({ start, end });
+  }
+  return ranges.length ? ranges : [{ start: 0, end: 1 }];
+}
+
+function makeFrac(contours: Contour[]): (t: number) => number {
+  return (t: number) => {
+    const tc = Math.max(0, Math.min(1, t));
+    let c = contours[0]!;
+    for (const cand of contours) {
+      if (tc >= cand.start && tc < cand.end) {
+        c = cand;
+        break;
+      }
+      if (tc >= cand.end) c = cand;
+    }
+    const span = c.end - c.start;
+    if (span <= 0) return c.start;
+    const local = (tc - c.start) / span;
+    const rotated = (((local + c.offset) % 1) + 1) % 1;
+    return c.start + rotated * span;
+  };
+}
+
+function contourOfT(contours: Contour[], t: number): Contour {
+  const tc = Math.max(0, Math.min(1, t));
+  for (const c of contours) {
+    if (tc >= c.start && tc < c.end) return c;
+  }
+  return contours[contours.length - 1]!;
+}
+
+/**
+ * Bir noktanın izinli logical-t aralığı — contour içinde path sırasına göre
+ * iki fiziksel komşusu (ray'dan bağımsız, fixed dahil) arasında. Wrap YOK:
+ * dikiş büyük boşluğa taşındığından uçlar zaten boş bölgeye bakar.
+ */
+function getContourBounds(
+  points: GamePoint[],
+  index: number,
+  contours: Contour[],
+): { minT: number; maxT: number } {
+  const self = points[index]!;
+  const contour = contourOfT(contours, self.correctT);
+
+  const group = points
+    .map((_, i) => i)
+    .filter((i) => contourOfT(contours, points[i]!.correctT) === contour)
+    .sort((a, b) => points[a]!.correctT - points[b]!.correctT);
+
+  const pos = group.indexOf(index);
+  const prev = pos > 0 ? points[group[pos - 1]!]! : null;
+  const next = pos < group.length - 1 ? points[group[pos + 1]!]! : null;
+
+  const minT = prev
+    ? (prev.fixed ? prev.correctT : prev.currentT) + T_GAP
+    : contour.start;
+  const maxT = next
+    ? (next.fixed ? next.correctT : next.currentT) - T_GAP
+    : contour.end;
+
+  return { minT: Math.min(minT, maxT), maxT: Math.max(minT, maxT) };
+}
 
 function scalePoint(p: PointDef, char: BezierCharacter): PointDef {
   return {
@@ -76,17 +185,19 @@ function projectToPath(
   minT = 0,
   maxT = 1,
   hintT?: number,
+  frac: (t: number) => number = IDENTITY_FRAC,
+  windowSize = HINT_WINDOW,
 ): number {
   let bestT = hintT ?? (minT + maxT) / 2;
   let minDist = Infinity;
 
-  const searchMin = hintT !== undefined ? Math.max(minT, hintT - HINT_WINDOW) : minT;
-  const searchMax = hintT !== undefined ? Math.min(maxT, hintT + HINT_WINDOW) : maxT;
+  const searchMin = hintT !== undefined ? Math.max(minT, hintT - windowSize) : minT;
+  const searchMax = hintT !== undefined ? Math.min(maxT, hintT + windowSize) : maxT;
 
   const steps = 120;
   for (let i = 0; i <= steps; i += 1) {
     const t = searchMin + (i / steps) * (searchMax - searchMin);
-    const pt = path.getPointAtLength(t * total);
+    const pt = path.getPointAtLength(frac(t) * total);
     const dist = (pt.x - x) ** 2 + (pt.y - y) ** 2;
     if (dist < minDist) {
       minDist = dist;
@@ -97,7 +208,7 @@ function projectToPath(
   const refineStart = Math.max(searchMin, bestT - 0.03);
   const refineEnd = Math.min(searchMax, bestT + 0.03);
   for (let t = refineStart; t <= refineEnd; t += 0.001) {
-    const pt = path.getPointAtLength(t * total);
+    const pt = path.getPointAtLength(frac(t) * total);
     const dist = (pt.x - x) ** 2 + (pt.y - y) ** 2;
     if (dist < minDist) {
       minDist = dist;
@@ -113,6 +224,7 @@ function applyCurrentPos(
   total: number,
   point: GamePoint,
   t = point.currentT,
+  frac: (t: number) => number = IDENTITY_FRAC,
 ): GamePoint {
   if (point.fixed) {
     return {
@@ -123,7 +235,7 @@ function applyCurrentPos(
     };
   }
 
-  const pt = posFromT(path, total, t);
+  const pt = posFromT(path, total, t, frac);
   return {
     ...point,
     currentT: t,
@@ -136,19 +248,85 @@ function syncPointsPositions(
   path: SVGPathElement,
   total: number,
   list: GamePoint[],
+  frac: (t: number) => number = IDENTITY_FRAC,
 ): GamePoint[] {
-  return list.map((p) => applyCurrentPos(path, total, p));
+  return list.map((p) => applyCurrentPos(path, total, p, p.currentT, frac));
+}
+
+/**
+ * Contour geometrisi kur ve her contour'un dikişini (logical t sınırı) o
+ * contour'daki noktaların EN BÜYÜK boşluğunun ortasına taşı. Böylece hiçbir
+ * nokta dikişte sıkışmaz (ör. "2" tepe noktası) ve sınırlar boş bölgeye bakar.
+ */
+function buildGeometry(
+  path: SVGPathElement,
+  total: number,
+  char: BezierCharacter,
+): PathGeometry {
+  const rawContours = detectContours(path, total);
+  const baseContours: Contour[] = rawContours.map((c) => ({
+    start: c.start,
+    end: c.end,
+    offset: 0,
+  }));
+
+  const defs: PointDef[] = [...char.fixedCorners, ...char.movablePoints];
+  // Offset'siz fiziksel konumları bul (identity contour üzerinde)
+  const physFrac = makeFrac(baseContours);
+  const physT = defs.map((def) => {
+    const scaled = def.fixed ? def : scalePoint(def, char);
+    return projectToPath(path, total, scaled.x, scaled.y, 0, 1, undefined, physFrac);
+  });
+
+  const contours: Contour[] = baseContours.map((c) => {
+    const span = c.end - c.start;
+    if (span <= 0) return c;
+    const locals = physT
+      .filter((t) => t >= c.start && t < c.end)
+      .map((t) => (t - c.start) / span)
+      .sort((a, b) => a - b);
+
+    if (locals.length === 0) return c;
+
+    // En büyük dairesel boşluğun ortası → dikiş oraya
+    let bestMid = 0;
+    let bestGap = -1;
+    for (let i = 0; i < locals.length; i += 1) {
+      const a = locals[i]!;
+      const b = i + 1 < locals.length ? locals[i + 1]! : locals[0]! + 1;
+      const gap = b - a;
+      if (gap > bestGap) {
+        bestGap = gap;
+        bestMid = (a + b) / 2;
+      }
+    }
+    // frac: physicalLocal = (logicalLocal + offset) mod 1; seam(logical 0) → bestMid
+    return { start: c.start, end: c.end, offset: ((bestMid % 1) + 1) % 1 };
+  });
+
+  return { contours, frac: makeFrac(contours) };
 }
 
 function buildGamePoints(
   path: SVGPathElement,
   total: number,
   char: BezierCharacter,
+  geometry: PathGeometry,
 ): GamePoint[] {
+  const { frac } = geometry;
   const defs: PointDef[] = [...char.fixedCorners, ...char.movablePoints];
   return defs.map((def) => {
     const scaled = def.fixed ? def : scalePoint(def, char);
-    const correctT = projectToPath(path, total, scaled.x, scaled.y);
+    const correctT = projectToPath(
+      path,
+      total,
+      scaled.x,
+      scaled.y,
+      0,
+      1,
+      undefined,
+      frac,
+    );
 
     if (def.fixed) {
       return {
@@ -163,7 +341,7 @@ function buildGamePoints(
       };
     }
 
-    const pt = path.getPointAtLength(correctT * total);
+    const pt = path.getPointAtLength(frac(correctT) * total);
     return {
       correctX: pt.x,
       correctY: pt.y,
@@ -177,73 +355,96 @@ function buildGamePoints(
   });
 }
 
-function getPathBounds(points: GamePoint[], index: number) {
-  const rail = points[index]!.rail;
-  const order = points
-    .map((_, i) => i)
-    .filter((i) => points[i]!.rail === rail)
-    .sort((a, b) => points[a]!.correctT - points[b]!.correctT);
-
-  const pos = order.indexOf(index);
-  const prev = pos > 0 ? points[order[pos - 1]!]! : null;
-  const next = pos < order.length - 1 ? points[order[pos + 1]!]! : null;
-
-  const minT = prev
-    ? (prev.fixed ? prev.correctT : prev.currentT) + T_GAP
-    : 0;
-  const maxT = next
-    ? (next.fixed ? next.correctT : next.currentT) - T_GAP
-    : 1;
-
-  return { minT, maxT };
-}
-
-function displaceT(
+/**
+ * Yarım-boşluk kuralıyla kaydır: her nokta komşusuna olan boşluğun EN FAZLA
+ * yarısı kadar ilerler → hiçbir nokta komşusunun üstünden geçemez, sıra korunur.
+ */
+function displaceInBounds(
   correctT: number,
   minT: number,
   maxT: number,
 ): number {
-  const direction = Math.random() > 0.5 ? 1 : -1;
-  const amount = 0.025 + Math.random() * 0.045;
-  const displaced = correctT + direction * amount;
-  return Math.max(minT + T_GAP, Math.min(maxT - T_GAP, displaced));
+  const lowRoom = (correctT - minT) * 0.5;
+  const highRoom = (maxT - correctT) * 0.5;
+  const canLow = lowRoom > 0.004;
+  const canHigh = highRoom > 0.004;
+
+  let direction: 1 | -1;
+  if (canLow && canHigh) direction = Math.random() > 0.5 ? 1 : -1;
+  else if (canHigh) direction = 1;
+  else if (canLow) direction = -1;
+  else return correctT;
+
+  const room = direction > 0 ? highRoom : lowRoom;
+  const frac = 0.55 + Math.random() * 0.4;
+  const amount = Math.min(room, Math.max(room * 0.5, room * frac));
+  return correctT + direction * amount;
 }
 
-function buildRoundPoints(base: GamePoint[]): {
-  introStart: GamePoint[];
-  scatterTargets: GamePoint[];
-} {
-  const scatterTargets = base.map((p, i) => {
-    if (p.fixed) return { ...p };
-    const { minT, maxT } = getPathBounds(base, i);
-    return { ...p, currentT: displaceT(p.correctT, minT, maxT) };
+/**
+ * Round noktalarını dağıt. Karşılıklı çiftlerden birini (path sırasına göre
+ * her contour'da bir atlamalı) doğru yerinde bırak — ipucu olsun.
+ */
+function buildRoundPoints(
+  base: GamePoint[],
+  contours: Contour[],
+): GamePoint[] {
+  const result = base.map((p) => ({ ...p }));
+
+  contours.forEach((contour) => {
+    const movable = base
+      .map((p, i) => ({ p, i }))
+      .filter(
+        ({ p }) => !p.fixed && contourOfT(contours, p.correctT) === contour,
+      )
+      .sort((a, b) => a.p.correctT - b.p.correctT);
+
+    movable.forEach(({ i }, order) => {
+      // İpucu: sıradaki bir noktayı doğru yerinde bırak
+      if (order % 2 === 1) return;
+      const { minT, maxT } = getContourBounds(base, i, contours);
+      result[i]!.currentT = displaceInBounds(base[i]!.correctT, minT, maxT);
+    });
   });
 
-  const introStart = scatterTargets.map((p) =>
-    p.fixed ? { ...p } : { ...p, currentT: p.correctT },
-  );
-
-  return { introStart, scatterTargets };
+  return result;
 }
 
-function calculateScore(points: GamePoint[]): number {
+/** 0 puan eşiği: köşegenin bu oranı kadar ortalama sapmada puan biter */
+const SCORE_MAX_MISS_FRAC = 0.16;
+/** Eğri üssü — >1 küçük sapmaya cömert, büyük sapmayı cezalandırır */
+const SCORE_CURVE = 1.35;
+
+/** Ortalama piksel sapması (bırakılan konum vs doğru konum) */
+function averageMissPx(points: GamePoint[]): number {
+  const moveable = points.filter((p) => !p.fixed);
+  if (moveable.length === 0) return 0;
+  const total = moveable.reduce(
+    (sum, p) =>
+      sum + Math.hypot(p.currentX - p.correctX, p.currentY - p.correctY),
+    0,
+  );
+  return total / moveable.length;
+}
+
+/** Piksel sapmasını köşegene göre normalize edip 0-100 puana çevir */
+function calculateScore(points: GamePoint[], diagonal: number): number {
   const moveable = points.filter((p) => !p.fixed);
   if (moveable.length === 0) return 0;
 
-  const totalError = moveable.reduce(
-    (sum, p) => sum + Math.abs(p.currentT - p.correctT),
-    0,
-  );
-  const avgError = totalError / moveable.length;
-  return Math.max(0, Math.round(100 - (avgError / 0.12) * 100));
+  const avgMiss = averageMissPx(points);
+  const maxMiss = Math.max(1, diagonal * SCORE_MAX_MISS_FRAC);
+  const t = Math.min(1, avgMiss / maxMiss);
+  return Math.max(0, Math.round(100 * Math.pow(1 - t, SCORE_CURVE)));
 }
 
 function posFromT(
   path: SVGPathElement,
   total: number,
   t: number,
+  frac: (t: number) => number = IDENTITY_FRAC,
 ): { x: number; y: number } {
-  const pt = path.getPointAtLength(Math.max(0, Math.min(1, t)) * total);
+  const pt = path.getPointAtLength(frac(Math.max(0, Math.min(1, t))) * total);
   return { x: pt.x, y: pt.y };
 }
 
@@ -277,7 +478,6 @@ export default function BezierBrain({
   const [pathReady, setPathReady] = useState(false);
 
   const pointsRef = useRef<GamePoint[]>([]);
-  const scatterTargetsRef = useRef<GamePoint[]>([]);
   const dragIndexRef = useRef<number | null>(null);
   const captureTargetRef = useRef<Element | null>(null);
   const endedRef = useRef(false);
@@ -289,6 +489,7 @@ export default function BezierBrain({
   const scoreAnchorRef = useRef<HTMLDivElement>(null);
   const finishTimelineRef = useRef<gsap.core.Timeline | null>(null);
   const totalLengthRef = useRef(0);
+  const geometryRef = useRef<PathGeometry | null>(null);
   const pendingResultRef = useRef<{ score: number; correct: boolean } | null>(
     null,
   );
@@ -318,14 +519,16 @@ export default function BezierBrain({
     const total = path.getTotalLength();
     totalLengthRef.current = total;
 
-    const base = buildGamePoints(path, total, character);
-    const { introStart, scatterTargets } = buildRoundPoints(base);
-    const syncedIntro = syncPointsPositions(path, total, introStart);
-    const syncedScatter = syncPointsPositions(path, total, scatterTargets);
+    const geometry = buildGeometry(path, total, character);
+    geometryRef.current = geometry;
+    const { frac, contours } = geometry;
 
-    scatterTargetsRef.current = syncedScatter;
-    pointsRef.current = syncedIntro;
-    setPoints(syncedIntro);
+    const base = buildGamePoints(path, total, character, geometry);
+    const scattered = buildRoundPoints(base, contours);
+    const synced = syncPointsPositions(path, total, scattered, frac);
+
+    pointsRef.current = synced;
+    setPoints(synced);
     setPathReady(true);
 
     if (letterWrapRef.current) {
@@ -400,17 +603,15 @@ export default function BezierBrain({
     finishTimelineRef.current?.kill();
 
     const live = pointsRef.current.map((p) => ({ ...p }));
-    const score100 = calculateScore(live);
-    const moveable = live.filter((p) => !p.fixed);
-    const avgError =
-      moveable.reduce(
-        (sum, p) => sum + Math.abs(p.currentT - p.correctT),
-        0,
-      ) / Math.max(1, moveable.length);
+    const diagonal = Math.hypot(
+      character.gameViewBox.w,
+      character.gameViewBox.h,
+    );
+    const score100 = calculateScore(live, diagonal);
 
     pendingResultRef.current = {
       score: score100 * 10,
-      correct: avgError < 0.03,
+      correct: score100 >= 90,
     };
 
     const moveableIndices = live
@@ -434,6 +635,7 @@ export default function BezierBrain({
 
       moveableIndices.forEach((index, order) => {
         const p = live[index]!;
+        /** Bırakılan t'den doğru t'ye düz interpolasyon — hep çizgi üzerinde */
         gsap.to(p, {
           currentT: p.correctT,
           duration: SNAP_DURATION,
@@ -443,11 +645,12 @@ export default function BezierBrain({
             const path = pathRef.current;
             const total = totalLengthRef.current;
             if (!path || total === 0) return;
+            const frac = geometryRef.current?.frac ?? IDENTITY_FRAC;
 
             setPoints((prev) => {
               const next = prev.map((pt, idx) =>
                 idx === index
-                  ? applyCurrentPos(path, total, pt, p.currentT)
+                  ? applyCurrentPos(path, total, pt, p.currentT, frac)
                   : pt,
               );
               pointsRef.current = next;
@@ -474,7 +677,7 @@ export default function BezierBrain({
     });
 
     tl.call(startSnap, undefined, SNAP_START_DELAY);
-  }, [phase]);
+  }, [phase, character]);
 
   useEffect(() => {
     if (!shellReady || !pathReady) return;
@@ -546,52 +749,9 @@ export default function BezierBrain({
     });
 
     tl.call(() => {
-      const live = pointsRef.current.map((p) => ({ ...p }));
-      const targets = scatterTargetsRef.current;
-      const moveableIndices = live
-        .map((p, i) => (!p.fixed ? i : -1))
-        .filter((i) => i >= 0);
-
-      let completed = 0;
-      const onScatterDone = () => {
-        completed += 1;
-        if (completed === moveableIndices.length) {
-          canDragRef.current = true;
-          setPhase("playing");
-          onGameStartRef.current();
-        }
-      };
-
-      moveableIndices.forEach((index, order) => {
-        const p = live[index]!;
-        const target = targets[index]!;
-        gsap.to(p, {
-          currentT: target.currentT,
-          duration: 0.6,
-          ease: "power2.inOut",
-          delay: order * 0.04,
-          onUpdate: () => {
-            const path = pathRef.current;
-            const total = totalLengthRef.current;
-            if (!path || total === 0) return;
-
-            const next = live.map((pt, idx) =>
-              idx === index
-                ? applyCurrentPos(path, total, pt, p.currentT)
-                : pt,
-            );
-            pointsRef.current = next;
-            setPoints(next);
-          },
-          onComplete: onScatterDone,
-        });
-      });
-
-      if (moveableIndices.length === 0) {
-        canDragRef.current = true;
-        setPhase("playing");
-        onGameStartRef.current();
-      }
+      canDragRef.current = true;
+      setPhase("playing");
+      onGameStartRef.current();
     });
 
     return () => {
@@ -647,7 +807,12 @@ export default function BezierBrain({
       if (!point || point.fixed || !path || total === 0) return;
 
       const svgPos = pointerToSVG(e);
-      const { minT, maxT } = getPathBounds(pointsRef.current, index);
+      const geometry = geometryRef.current;
+      const frac = geometry?.frac ?? IDENTITY_FRAC;
+      const contours = geometry?.contours ?? [
+        { start: 0, end: 1, offset: 0 },
+      ];
+      const { minT, maxT } = getContourBounds(pointsRef.current, index, contours);
       const newT = projectToPath(
         path,
         total,
@@ -656,6 +821,8 @@ export default function BezierBrain({
         minT,
         maxT,
         point.currentT,
+        frac,
+        DRAG_WINDOW,
       );
 
       setPoints((prev) => {
@@ -664,7 +831,7 @@ export default function BezierBrain({
         if (!path || total === 0) return prev;
 
         const next = prev.map((p, i) =>
-          i === index ? applyCurrentPos(path, total, p, newT) : p,
+          i === index ? applyCurrentPos(path, total, p, newT, frac) : p,
         );
         pointsRef.current = next;
         return next;

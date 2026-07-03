@@ -80,6 +80,33 @@ const TWO_MOVABLE_POINTS: BezierPointDef[] = [
   { x: 233.65, y: 71.0, fixed: false, rail: "outer" },
 ];
 
+/* ─────────────────────────  D  ───────────────────────── */
+
+const D_PATH =
+  "M432.6 0.5V636.9H363.2V556.7C336.407 611.552 272.17 645.9 207.1 645.9C89.7884 645.9 0.5 553.839 0.5 418.6C0.500191 284.259 90.6902 191.3 208 191.3C267.72 191.3 332.782 222.122 359.6 272.56V0.5H432.6ZM217 258C175.731 258 140.319 273.472 115.221 301.26C90.1188 329.051 75.2999 369.199 75.2998 418.6C75.2998 468.002 89.8957 508.15 114.885 535.94C139.87 563.727 175.28 579.2 217 579.2C301.249 579.2 358.7 506.605 358.7 416.8V407.8C358.7 327.037 298.586 258 217 258Z";
+
+/** Figma Group 61 — gri (sabit) stem köşeleri */
+const D_FIXED_CORNERS: BezierPointDef[] = [
+  { x: 431.1, y: 0.0, fixed: true, rail: "outer" },
+  { x: 358.41, y: 0.0, fixed: true, rail: "outer" },
+  { x: 357.35, y: 271.78, fixed: true, rail: "outer" },
+  { x: 362.56, y: 557.52, fixed: true, rail: "outer" },
+  { x: 362.56, y: 634.4, fixed: true, rail: "outer" },
+  { x: 431.1, y: 634.4, fixed: true, rail: "outer" },
+];
+
+/** Figma Group 61 — siyah (taşınabilir) bowl noktaları */
+const D_MOVABLE_POINTS: BezierPointDef[] = [
+  { x: 207.38, y: 189.62, fixed: false, rail: "outer" },
+  { x: 215.55, y: 255.78, fixed: false, rail: "outer" },
+  { x: 0.0, y: 417.24, fixed: false, rail: "outer" },
+  { x: 74.31, y: 417.24, fixed: false, rail: "inner" },
+  { x: 357.35, y: 402.91, fixed: false, rail: "outer" },
+  { x: 357.35, y: 422.91, fixed: false, rail: "inner" },
+  { x: 216.39, y: 577.52, fixed: false, rail: "outer" },
+  { x: 206.39, y: 644.4, fixed: false, rail: "outer" },
+];
+
 /* ─────────────────────────  Havuz  ───────────────────────── */
 
 export const BEZIER_CHARACTERS: readonly BezierCharacter[] = [
@@ -103,6 +130,16 @@ export const BEZIER_CHARACTERS: readonly BezierCharacter[] = [
     fixedCorners: TWO_FIXED_CORNERS,
     movablePoints: TWO_MOVABLE_POINTS,
   },
+  {
+    id: "D",
+    label: "D",
+    path: D_PATH,
+    gameViewBox: { w: 433, h: 646 },
+    viewBoxPad: 14,
+    pointsViewBox: { w: 433, h: 646 },
+    fixedCorners: D_FIXED_CORNERS,
+    movablePoints: D_MOVABLE_POINTS,
+  },
 ];
 
 export function getBezierCharacter(sequenceIndex: number): BezierCharacter {
@@ -110,4 +147,28 @@ export function getBezierCharacter(sequenceIndex: number): BezierCharacter {
     ((sequenceIndex % BEZIER_CHARACTERS.length) + BEZIER_CHARACTERS.length) %
       BEZIER_CHARACTERS.length
   ]!;
+}
+
+/** Test sayfası: `?char=D` veya `?index=2` ile tek harf sabitle */
+export function resolveBezierCharacterIndex(
+  input: string | number | null | undefined,
+): number | null {
+  if (input === null || input === undefined || input === "") return null;
+
+  if (typeof input === "number") {
+    if (input < 0 || input >= BEZIER_CHARACTERS.length) return null;
+    return input;
+  }
+
+  const trimmed = input.trim();
+  const asNum = Number(trimmed);
+  if (trimmed !== "" && !Number.isNaN(asNum) && Number.isInteger(asNum)) {
+    if (asNum < 0 || asNum >= BEZIER_CHARACTERS.length) return null;
+    return asNum;
+  }
+
+  const byId = BEZIER_CHARACTERS.findIndex(
+    (c) => c.id.toLowerCase() === trimmed.toLowerCase(),
+  );
+  return byId >= 0 ? byId : null;
 }

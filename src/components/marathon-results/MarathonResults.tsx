@@ -6,15 +6,6 @@ import { useRouter } from "next/navigation";
 
 import PressButton from "@/components/PressButton";
 import {
-  BADGE_CX,
-  BADGE_CY,
-  BADGE_INNER_R_BASE,
-  BADGE_INNER_R_THICK,
-  CircularScoreBadge,
-  updateBadgeTextArcs,
-} from "@/components/marathon-results/CircularScoreBadge";
-import {
-  BADGE_PX,
   CARD_DROP,
   CARD_OFFSET_X,
   CARD_OFFSET_Y,
@@ -30,6 +21,7 @@ import {
   PLAYER_CARD_H,
   PLAYER_CARD_W,
   RESULTS_STACK_LIFT,
+  RING_DISPLAY_PX,
   SCOREBOARD_CARD_GAP,
   BUTTONS_BOTTOM,
 } from "@/components/marathon-results/constants";
@@ -40,7 +32,7 @@ import {
 } from "@/components/marathon-results/hudPanelIntro";
 import { PlayerScoreCard } from "@/components/marathon-results/PlayerScoreCard";
 import { ScoreboardTable } from "@/components/marathon-results/ScoreboardTable";
-import { getMarathonResultMessage } from "@/lib/marathonMessages";
+import { getScoreRingImage } from "@/lib/scoreRing";
 import { buildLeaderboard } from "@/lib/mockLeaderboard";
 import { useGameStore } from "@/stores/gameStore";
 
@@ -61,7 +53,7 @@ export function MarathonResults({
   const nickname = useGameStore((s) => s.nickname);
   const playerHex = nickname ?? "#F7BEA0";
 
-  const message = useMemo(() => getMarathonResultMessage(score), [score]);
+  const ringSrc = useMemo(() => getScoreRingImage(score), [score]);
   const leaderboard = useMemo(() => buildLeaderboard(), []);
 
   const [designScale, setDesignScale] = useState(1);
@@ -73,10 +65,6 @@ export function MarathonResults({
   const boardClipRef = useRef<HTMLDivElement>(null);
   const boardInnerRef = useRef<HTMLDivElement>(null);
   const badgeWrapRef = useRef<HTMLDivElement>(null);
-  const ringRef = useRef<SVGCircleElement>(null);
-  const textRotateRef = useRef<SVGGElement>(null);
-  const topArcPathRef = useRef<SVGPathElement>(null);
-  const bottomArcPathRef = useRef<SVGPathElement>(null);
   const cardRef = useRef<HTMLDivElement>(null);
   const cardRootRef = useRef<HTMLDivElement>(null);
   const avatarCellRef = useRef<HTMLDivElement>(null);
@@ -85,8 +73,7 @@ export function MarathonResults({
   const scoreCellRef = useRef<HTMLDivElement>(null);
   const homeBtnRef = useRef<HTMLDivElement>(null);
   const againBtnRef = useRef<HTMLDivElement>(null);
-  const textSpinRef = useRef<gsap.core.Tween | null>(null);
-  const textSpinStateRef = useRef({ angle: 0 });
+  const ringSpinRef = useRef<gsap.core.Tween | null>(null);
 
   /* ── Responsive scale ── */
   useLayoutEffect(() => {
@@ -106,8 +93,6 @@ export function MarathonResults({
     const boardClip = boardClipRef.current;
     const boardInner = boardInnerRef.current;
     const badge = badgeWrapRef.current;
-    const ring = ringRef.current;
-    const textRotate = textRotateRef.current;
     const card = cardRef.current;
     const cardRoot = cardRootRef.current;
     const avatarCell = avatarCellRef.current;
@@ -124,8 +109,6 @@ export function MarathonResults({
       !boardClip ||
       !boardInner ||
       !badge ||
-      !ring ||
-      !textRotate ||
       !card ||
       !cardRoot ||
       !avatarCell ||
@@ -137,64 +120,21 @@ export function MarathonResults({
     )
       return;
 
-    const setTextRotation = (target: SVGGElement, angle: number) => {
-      target.setAttribute(
-        "transform",
-        `rotate(${angle} ${BADGE_CX} ${BADGE_CY})`,
-      );
-    };
-
-    const startTextSpin = (target: SVGGElement, fromAngle = 0) => {
-      textSpinRef.current?.kill();
-      gsap.set(target, { clearProps: "transform" });
-      textSpinStateRef.current.angle = fromAngle;
-      setTextRotation(target, fromAngle);
-      textSpinRef.current = gsap.to(textSpinStateRef.current, {
-        angle: "+=360",
+    /** Halka görselini sürekli yavaş döndür (0°'den başlar). */
+    const startRingSpin = (fromAngle = 0) => {
+      ringSpinRef.current?.kill();
+      gsap.set(badge, { rotation: fromAngle });
+      ringSpinRef.current = gsap.to(badge, {
+        rotation: fromAngle + 360,
         duration: 28,
         repeat: -1,
         ease: "none",
-        onUpdate: () => {
-          setTextRotation(target, textSpinStateRef.current.angle);
-        },
       });
     };
 
-    const stopTextSpin = () => {
-      textSpinRef.current?.kill();
-      textSpinRef.current = null;
-      if (textRotateRef.current) {
-        textSpinStateRef.current.angle = 0;
-        setTextRotation(textRotateRef.current, 0);
-      }
-    };
-
-    const syncRingTextArcs = (innerR: number) => {
-      updateBadgeTextArcs(
-        topArcPathRef.current,
-        bottomArcPathRef.current,
-        innerR,
-      );
-    };
-
-    /** Dönüşü en kısa yoldan 0°'ye yumuşat — ani sıçrama yok */
-    const easeTextSpinToRest = (target: SVGGElement, duration = 0.5) => {
-      textSpinRef.current?.kill();
-      textSpinRef.current = null;
-      const current = textSpinStateRef.current.angle;
-      const normalized = ((current % 360) + 360) % 360;
-      const delta = normalized > 180 ? 360 - normalized : -normalized;
-
-      return gsap.to(textSpinStateRef.current, {
-        angle: current + delta,
-        duration,
-        ease: "power2.out",
-        onUpdate: () => setTextRotation(target, textSpinStateRef.current.angle),
-        onComplete: () => {
-          textSpinStateRef.current.angle = 0;
-          setTextRotation(target, 0);
-        },
-      });
+    const stopRingSpin = () => {
+      ringSpinRef.current?.kill();
+      ringSpinRef.current = null;
     };
 
     const boardFullH = boardInner.offsetHeight;
@@ -259,8 +199,6 @@ export function MarathonResults({
         rotation: -73,
         transformOrigin: "50% 50%",
       });
-      gsap.set(ring, { attr: { r: BADGE_INNER_R_BASE } });
-      syncRingTextArcs(BADGE_INNER_R_BASE);
       gsap.set(homeBtn, { y: 52, opacity: 0 });
       gsap.set(againBtn, { y: 52, opacity: 0 });
     };
@@ -270,46 +208,32 @@ export function MarathonResults({
       gsap.set(stage, { y: INTRO_Y });
       gsap.set(boardClip, { height: 0 });
       gsap.set(badge, { scale: 1, opacity: 1, rotation: 0 });
-      gsap.set(ring, { attr: { r: BADGE_INNER_R_BASE } });
-      updateBadgeTextArcs(
-        topArcPathRef.current,
-        bottomArcPathRef.current,
-        BADGE_INNER_R_BASE,
-      );
-      setTextRotation(textRotate, 0);
       setCardAssembled();
       hideHudPanelElements();
       gsap.set(homeBtn, { y: 52, opacity: 0 });
       gsap.set(againBtn, { y: 52, opacity: 0 });
-      startTextSpin(textRotate, 0);
+      startRingSpin(0);
     };
 
     const applyScene2223 = () => {
       gsap.set(blur, { opacity: 1 });
       gsap.set(stage, { y: INTRO_Y });
       gsap.set(boardClip, { height: 0 });
-      gsap.set(badge, { scale: 1, opacity: 1, rotation: 0 });
-      gsap.set(ring, { attr: { r: BADGE_INNER_R_THICK } });
-      updateBadgeTextArcs(
-        topArcPathRef.current,
-        bottomArcPathRef.current,
-        BADGE_INNER_R_THICK,
-      );
+      gsap.set(badge, { scale: 1, opacity: 1, rotation: 63.15 });
       setCardAssembled();
       hideHudPanelElements();
       gsap.set(homeBtn, { y: 52, opacity: 0 });
       gsap.set(againBtn, { y: 52, opacity: 0 });
-      startTextSpin(textRotate, 63.15);
+      startRingSpin(63.15);
     };
 
     const applyFinal = (stageY: number) => {
-      stopTextSpin();
+      stopRingSpin();
       gsap.set(blur, { opacity: 1 });
       hideHudPanelElements();
       gsap.set(stage, { y: stageY });
       gsap.set(boardClip, { height: boardFullH, overflow: "visible" });
       gsap.set(badge, { opacity: 0, scale: 0 });
-      gsap.set(ring, { attr: { r: BADGE_INNER_R_BASE } });
       setCardAssembled();
       gsap.set(homeBtn, { y: 0, opacity: 1 });
       gsap.set(againBtn, { y: 0, opacity: 1 });
@@ -344,24 +268,21 @@ export function MarathonResults({
     setIntroHidden();
     syncHudElevated();
     gsap.set(badge, {
-      scale: 0.38,
+      scale: 0,
       opacity: 0,
       rotation: -73,
       transformOrigin: "50% 50%",
     });
-    gsap.set(ring, { attr: { r: BADGE_INNER_R_BASE } });
-    syncRingTextArcs(BADGE_INNER_R_BASE);
     gsap.set(homeBtn, { y: 52, opacity: 0 });
     gsap.set(againBtn, { y: 52, opacity: 0 });
 
     const tl = gsap.timeline({ defaults: { ease: "power2.out" } });
 
     const badgeSpinStart = INTRO_BADGE_START;
-    const badgeFullStart = badgeSpinStart + 1.0;
-    const ringThickStart = badgeFullStart + 1.2;
-    const textRestStart = ringThickStart + 3.5;
-    const badgeShrinkStart = textRestStart + 0.45;
-    const stageDropStart = badgeShrinkStart + 0.3;
+    const badgeGrowDuration = 2.4;
+    const ringSpinStart = badgeSpinStart + badgeGrowDuration;
+    const badgeShrinkStart = ringSpinStart + 3.5;
+    const stageDropStart = badgeShrinkStart + 0.75;
     const boardRevealStart = stageDropStart + 1.1;
     const stageFinalStart = boardRevealStart + 0.4;
     const buttonsStart = stageFinalStart + 1.4;
@@ -399,45 +320,28 @@ export function MarathonResults({
       INTRO_CARD_IN_START,
     );
 
-    // 4) Halka arkadan dönerek gelir
-    tl.to(
+    // 4) Halka sıfırdan son boyuta tek seferde smooth büyür
+    tl.fromTo(
       badge,
-      { scale: 0.62, opacity: 0.85, rotation: -20, duration: 1.1 },
-      badgeSpinStart,
-    );
-    tl.to(
-      badge,
+      { scale: 0, opacity: 0, rotation: -73 },
       {
         scale: 1,
         opacity: 1,
         rotation: 0,
-        duration: 1.4,
-        ease: "back.out(1.4)",
+        duration: badgeGrowDuration,
+        ease: "power3.out",
+        transformOrigin: "50% 50%",
       },
-      badgeFullStart,
+      badgeSpinStart,
     );
-    tl.add(() => startTextSpin(textRotate), badgeFullStart);
+    tl.add(() => startRingSpin(0), ringSpinStart);
 
-    // Ring thickens
-    tl.to(
-      ring,
-      {
-        attr: { r: BADGE_INNER_R_THICK },
-        duration: 1.0,
-        onUpdate: () => {
-          const innerR = Number(ring.getAttribute("r") ?? BADGE_INNER_R_BASE);
-          syncRingTextArcs(innerR);
-        },
-      },
-      ringThickStart,
-    );
-
-    // Metin yavaşlar, halka küçülür
-    tl.add(() => easeTextSpinToRest(textRotate, 0.5), textRestStart);
+    // Halka merkeze doğru küçülerek kaybolur
+    tl.add(() => stopRingSpin(), badgeShrinkStart);
     tl.to(
       badge,
       {
-        scale: 0.06,
+        scale: 0,
         opacity: 0,
         duration: 0.9,
         ease: "power2.inOut",
@@ -485,7 +389,7 @@ export function MarathonResults({
 
     return () => {
       tl.kill();
-      stopTextSpin();
+      stopRingSpin();
       restoreHudPanelElements();
     };
   }, [designScale, freezeScene, instant]);
@@ -543,21 +447,20 @@ export function MarathonResults({
                 ref={badgeWrapRef}
                 className="pointer-events-none absolute z-[0]"
                 style={{
-                  width: BADGE_PX,
-                  height: BADGE_PX,
+                  width: RING_DISPLAY_PX,
+                  height: RING_DISPLAY_PX,
                   left: -CARD_OFFSET_X,
                   top: -CARD_OFFSET_Y,
                   transformOrigin: "50% 50%",
                   backfaceVisibility: "hidden",
                 }}
               >
-                <CircularScoreBadge
-                  ref={ringRef}
-                  textRotateRef={textRotateRef}
-                  topArcPathRef={topArcPathRef}
-                  bottomArcPathRef={bottomArcPathRef}
-                  message={message}
-                  className="h-full w-full"
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={ringSrc}
+                  alt=""
+                  className="h-full w-full object-contain"
+                  draggable={false}
                 />
               </div>
 

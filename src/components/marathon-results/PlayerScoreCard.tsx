@@ -2,6 +2,7 @@
 
 import type { RefObject } from "react";
 import {
+  PLAYER_AVATAR_FACE_SCALE,
   PLAYER_AVATAR_PX,
   PLAYER_CARD_BOTTOM_H,
   PLAYER_CARD_H,
@@ -59,13 +60,21 @@ export function PlayerScoreCard({
         className="box-border flex items-center justify-center border-b border-r border-[#1A1A1A]"
         style={{ backgroundColor: displayHex, gridColumn: 1, gridRow: 1 }}
       >
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={avatarFaceSrc}
-          alt=""
-          className="rounded-full border border-[#1A1A1A] bg-[#E5E5E5] object-cover"
+        <div
+          className="overflow-hidden rounded-full border border-[#1A1A1A] bg-[#E5E5E5]"
           style={{ width: PLAYER_AVATAR_PX, height: PLAYER_AVATAR_PX }}
-        />
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={avatarFaceSrc}
+            alt=""
+            className="h-full w-full object-cover"
+            style={{
+              transform: `scale(${PLAYER_AVATAR_FACE_SCALE})`,
+              transformOrigin: "center center",
+            }}
+          />
+        </div>
       </div>
 
       <div

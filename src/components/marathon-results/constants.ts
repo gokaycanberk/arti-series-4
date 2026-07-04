@@ -2,7 +2,7 @@
 export const DESIGN_W = 1920;
 export const DESIGN_H = 1080;
 
-/** Ellipse14 — node 80:2547 */
+/** Ellipse14 — node 80:2547 (Figma referans) */
 export const BADGE_PX = 693;
 
 export const PLAYER_CARD_W = 598;
@@ -14,10 +14,18 @@ export const PLAYER_CARD_TOP_H = 72;
 export const PLAYER_CARD_BOTTOM_H = 73;
 
 export const PLAYER_AVATAR_PX = 99.379;
+/** Skor kartı avatar — yüzün tamamı görünsün diye hafif zoom out */
+export const PLAYER_AVATAR_FACE_SCALE = 0.88;
 
-/** Skor kartı halka merkezinde — Figma Group 42 */
-export const CARD_OFFSET_X = (BADGE_PX - PLAYER_CARD_W) / 2;
-export const CARD_OFFSET_Y = BADGE_PX / 2 - PLAYER_CARD_H / 2;
+/**
+ * PNG halka görüntüleme boyutu (Figma 693px referans).
+ * Asset iç boşluğu biraz dar; kart yazıya binmesin diye hafif büyütülür.
+ */
+export const RING_DISPLAY_PX = 770;
+
+/** Skor kartı halka merkezinde — PNG halka boyutuna göre */
+export const CARD_OFFSET_X = (RING_DISPLAY_PX - PLAYER_CARD_W) / 2;
+export const CARD_OFFSET_Y = RING_DISPLAY_PX / 2 - PLAYER_CARD_H / 2;
 
 /** Skorboard: header 56 + 10 satır × 34 */
 export const SCOREBOARD_HEADER_H = 56;
@@ -70,8 +78,7 @@ export const RESULTS_TOP_PX = 180;
 export const CARD_BUTTON_GAP = STACK_GAP_PX;
 
 /** Alt butonlar + kart arası için viewport payı */
-export const BUTTONS_RESERVE =
-  BUTTONS_BOTTOM + BUTTON_HEIGHT + CARD_BUTTON_GAP;
+export const BUTTONS_RESERVE = BUTTONS_BOTTOM + BUTTON_HEIGHT + CARD_BUTTON_GAP;
 
 /** Figma koordinatını viewport pikseline çevir */
 export function figmaYToViewport(figmaY: number, viewportH: number): number {
@@ -86,10 +93,7 @@ export function figmaXToViewport(figmaX: number, viewportW: number): number {
  * Oyuncu kartının üst kenarı (ekran px).
  * Kart altı ↔ buton üstü = STACK_GAP_PX × scale.
  */
-export function getPlayerCardTop(
-  viewportH: number,
-  scale: number,
-): number {
+export function getPlayerCardTop(viewportH: number, scale: number): number {
   const gap = STACK_GAP_PX * scale;
   const cardBottom = viewportH - BUTTONS_BOTTOM - BUTTON_HEIGHT - gap;
   return cardBottom - PLAYER_CARD_H * scale;

@@ -4,8 +4,16 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProp
 import gsap from "gsap";
 import ArrowKeycap, { type ArrowKeycapHandle } from "@/components/ArrowKeycap";
 import { GameDescBox, DESC_BOX_LEFT, DESC_BOX_TOP } from "@/components/GameDescBox";
+import { GameIntroOverlay } from "@/components/GameIntroOverlay";
 import ScoreFlyPopup from "@/components/games/ScoreFlyPopup";
 import { scoreFromDistance } from "@/components/games/scoreUtils";
+import {
+  introPendingPhase,
+  prepareGameContentHidden,
+  runGameContentReveal,
+  runIntroCardTimeline,
+  shouldSkipIntroCard,
+} from "@/lib/gameIntro";
 import {
   pickOpticalPanicRound,
   type OpticalPanicRound,
@@ -17,10 +25,12 @@ interface OpticalPanicProps {
   shellReady: boolean;
   onAnswer: (correct: boolean) => void;
   onGameStart: () => void;
+  onIntroComplete: () => void;
   addRoundScore: (points: number) => void;
   onGameComplete?: () => void;
   /** Maraton / test: 0=MIND, 1=HEART, 2=FLAIR */
   sequenceIndex?: number;
+  attemptIndex?: number;
   round: number;
   timeLeft: number;
 }
@@ -50,9 +60,11 @@ export default function OpticalPanic({
   shellReady,
   onAnswer,
   onGameStart,
+  onIntroComplete,
   addRoundScore,
   onGameComplete,
   sequenceIndex,
+  attemptIndex,
   round,
   timeLeft,
 }: OpticalPanicProps) {
@@ -72,6 +84,7 @@ export default function OpticalPanic({
   const animRef = useRef<gsap.core.Tween | null>(null);
   const introCardRef = useRef<HTMLDivElement>(null);
   const descBoxRef = useRef<HTMLDivElement>(null);
+  const gameBoardRef = useRef<HTMLDivElement>(null);
   const controlsRef = useRef<HTMLDivElement>(null);
   const leftKeyRef = useRef<ArrowKeycapHandle>(null);
   const rightKeyRef = useRef<ArrowKeycapHandle>(null);
@@ -87,8 +100,12 @@ export default function OpticalPanic({
   const handleLandRef = useRef<() => void>(() => {});
   const landedRef = useRef(false);
   const onGameStartRef = useRef(onGameStart);
+  const onIntroCompleteRef = useRef(onIntroComplete);
   useEffect(() => {
     onGameStartRef.current = onGameStart;
+  });
+  useEffect(() => {
+    onIntroCompleteRef.current = onIntroComplete;
   });
 
   const FALL_DURATION = 13;
@@ -257,79 +274,55 @@ export default function OpticalPanic({
   useEffect(() => {
     if (!shellReady) return;
 
+    const introAttempt = attemptIndex ?? sequenceIndex;
+
     queueMicrotask(() => {
       prepareRound();
-      setPhase("intro");
+      if (shouldSkipIntroCard(introAttempt)) {
+        onIntroCompleteRef.current();
+        setPhase("playing");
+      } else {
+        setPhase("intro");
+      }
     });
-  }, [shellReady, gameKey, sequenceIndex, prepareRound]);
+  }, [shellReady, gameKey, sequenceIndex, attemptIndex, prepareRound]);
 
   useEffect(() => {
     if (!shellReady || phase !== "intro") return;
-
-    const skipIntro = sequenceIndex !== undefined && sequenceIndex > 0;
-    if (skipIntro) {
-      queueMicrotask(() => {
-        if (descBoxRef.current) {
-          gsap.set(descBoxRef.current, { opacity: 1, y: 0 });
-        }
-        if (controlsRef.current) {
-          gsap.set(controlsRef.current, { opacity: 1, y: 0 });
-        }
-        setPhase("playing");
-        onGameStartRef.current();
-      });
-      return;
-    }
+    if (shouldSkipIntroCard(attemptIndex ?? sequenceIndex)) return;
 
     const card = introCardRef.current;
-    const descBox = descBoxRef.current;
-    const controls = controlsRef.current;
 
-    const tl = gsap.timeline({
-      onComplete: () => {
-        setPhase("playing");
-        onGameStartRef.current();
-      },
+    const tl = runIntroCardTimeline(card, () => {
+      onIntroCompleteRef.current();
+      setPhase("playing");
     });
-
-    if (descBox) {
-      tl.fromTo(
-        descBox,
-        { opacity: 0, y: -8 },
-        { opacity: 1, y: 0, duration: 0.5, ease: "power3.out" },
-        0,
-      );
-    }
-
-    if (controls) {
-      tl.fromTo(
-        controls,
-        { opacity: 0, y: 12 },
-        { opacity: 1, y: 0, duration: 0.5, ease: "power3.out" },
-        0.1,
-      );
-    }
-
-    if (card) {
-      tl.fromTo(
-        card,
-        { y: "100vh", opacity: 0 },
-        { y: 0, opacity: 1, duration: 0.8, ease: "back.out(1.2)" },
-        0.15,
-      );
-      tl.to({}, { duration: 0.8 });
-      tl.to(card, {
-        y: "100vh",
-        opacity: 0,
-        duration: 0.6,
-        ease: "power2.in",
-      });
-    }
 
     return () => {
       tl.kill();
     };
-  }, [shellReady, gameKey, phase, sequenceIndex]);
+  }, [shellReady, gameKey, phase, sequenceIndex, attemptIndex]);
+
+  useLayoutEffect(() => {
+    if (phase !== "playing") return;
+    prepareGameContentHidden({
+      desc: descBoxRef.current,
+      board: gameBoardRef.current,
+    });
+  }, [phase, gameKey]);
+
+  useEffect(() => {
+    if (phase !== "playing") return;
+
+    const tl = runGameContentReveal(
+      { desc: descBoxRef.current, board: gameBoardRef.current },
+      () => onGameStartRef.current(),
+    );
+
+    return () => {
+      tl.kill();
+    };
+  }, [phase, gameKey]);
 
   useEffect(() => {
     if (phase === "intro" || phase === "playing") {
@@ -521,47 +514,48 @@ export default function OpticalPanic({
     </span>
   );
 
+  const introActive = introPendingPhase(phase);
+
   return (
     <div
       ref={containerRef}
       className="absolute inset-0 overflow-visible select-none"
     >
-      {/* INTRO CARD */}
-      <div
+      <GameIntroOverlay
         ref={introCardRef}
-        className="absolute inset-0 z-30 flex items-center justify-center pointer-events-none"
-        style={{ opacity: 0 }}
-      >
-        <div
-          className="bg-white/95 backdrop-blur-sm rounded-[40px] px-12 py-8 flex flex-col items-center text-center shadow-lg"
-          style={{ maxWidth: "460px" }}
-        >
-          <h2
-            className="font-bold text-[#1A1A1A] mb-3"
-            style={{
-              fontSize: "clamp(28px, 5vw, 42px)",
-              fontFamily: "var(--font-planc), serif",
-            }}
-          >
-            OPTICAL PANIC
-          </h2>
-          <p className="text-[14px] text-[#555] leading-relaxed">
-            Use the arrow keys to guide the falling letter into the right spot
-            and pray your optical kerning survives the chaos.
-          </p>
-        </div>
-      </div>
+        gameId="optical-panic"
+        description={
+          "Use the arrow keys to guide the falling letter into the right spot\nand pray your optical kerning survives the chaos."
+        }
+      />
 
-      <GameDescBox ref={descBoxRef} title="OPTICAL PANIC">
+      <GameDescBox
+        ref={descBoxRef}
+        title="OPTICAL PANIC"
+        style={
+          introActive
+            ? { visibility: "hidden", pointerEvents: "none" }
+            : undefined
+        }
+      >
         Use the arrow keys to guide the falling letter into the right spot then
         press done and let&apos;s see how type nerd you really are.
       </GameDescBox>
 
       <div
+        ref={gameBoardRef}
+        className="absolute inset-0"
+        style={
+          introActive
+            ? { visibility: "hidden", pointerEvents: "none" }
+            : undefined
+        }
+      >
+      <div
         className="absolute z-10 flex flex-col"
         style={{ left: DESC_BOX_LEFT, top: DESC_BOX_TOP + 140, gap: 12 }}
       >
-        <div ref={controlsRef} style={{ opacity: 0, display: "flex", gap: "8px" }}>
+        <div ref={controlsRef} style={{ display: "flex", gap: "8px" }}>
           <ArrowKeycap
             ref={leftKeyRef}
             direction="left"
@@ -604,7 +598,7 @@ export default function OpticalPanic({
       </div>
 
       {/* KELİME — sabit katman */}
-      {(phase === "intro" || phase === "playing" || phase === "landed") && (
+      {(phase === "playing" || phase === "landed") && (
         <div
           ref={wordAreaRef}
           className="absolute left-[3%] right-[3%] z-[5] flex flex-col leading-none"
@@ -692,6 +686,7 @@ export default function OpticalPanic({
           <div aria-hidden className="h-[1.5px] w-full shrink-0" />
         </div>
       )}
+      </div>
 
       {flyScore !== null && (
         <ScoreFlyPopup

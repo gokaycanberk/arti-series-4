@@ -13,34 +13,7 @@ import {
 } from "react";
 
 import PressButton from "@/components/PressButton";
-
-const PARALLAX_LAYERS = [
-  {
-    src: "/layers/Layer1.png",
-    depth: 15,
-    className: "left-[-5%] top-[30%] w-[26vw] md:w-[20vw]",
-  },
-  {
-    src: "/layers/Layer2.png",
-    depth: 10,
-    className: "left-[45%] top-[-3%] w-[14vw] md:w-[10vw]",
-  },
-  {
-    src: "/layers/Layer3.png",
-    depth: 20,
-    className: "right-[-3%] top-[5%] w-[28vw] md:w-[22vw]",
-  },
-  {
-    src: "/layers/Layer4.png",
-    depth: 12,
-    className: "left-[10%] bottom-[5%] w-[24vw] md:w-[18vw]",
-  },
-  {
-    src: "/layers/Layer3.png",
-    depth: 18,
-    className: "right-[5%] bottom-[8%] w-[28vw] md:w-[22vw]",
-  },
-] as const;
+import { HOME_GAME_LOGOS } from "@/lib/homeGameLogos";
 
 export default function HomePage() {
   const router = useRouter();
@@ -54,7 +27,7 @@ export default function HomePage() {
   const [introComplete, setIntroComplete] = useState(false);
   const [parallaxEnabled, setParallaxEnabled] = useState(false);
   const [layerOffsets, setLayerOffsets] = useState(
-    PARALLAX_LAYERS.map(() => ({ x: 0, y: 0 })),
+    HOME_GAME_LOGOS.map(() => ({ x: 0, y: 0 })),
   );
 
   useEffect(() => {
@@ -200,7 +173,7 @@ export default function HomePage() {
       const deltaY = (event.clientY - centerY) / centerY;
 
       setLayerOffsets(
-        PARALLAX_LAYERS.map((layer) => ({
+        HOME_GAME_LOGOS.map((layer) => ({
           x: deltaX * layer.depth,
           y: deltaY * layer.depth,
         })),
@@ -329,28 +302,34 @@ export default function HomePage() {
           }}
         />
 
-        {PARALLAX_LAYERS.map((layer, index) => (
-          <div
-            key={`${layer.src}-${index}`}
-            className={`pointer-events-none absolute ${layer.className}`}
-            style={{
-              transform: `translate3d(${layerOffsets[index]?.x ?? 0}px, ${layerOffsets[index]?.y ?? 0}px, 0)`,
-              transition: parallaxEnabled
-                ? "transform 0.3s ease-out"
-                : undefined,
-            }}
-          >
-            <Image
-              src={layer.src}
-              alt=""
-              width={480}
-              height={480}
-              className="h-auto w-full select-none"
-              draggable={false}
-              priority={introComplete}
-            />
-          </div>
-        ))}
+        <div className="pointer-events-none absolute inset-0 min-h-[100vh]">
+          {HOME_GAME_LOGOS.map((layer, index) => (
+            <div
+              key={layer.id}
+              className="absolute z-0 will-change-transform"
+              style={{
+                left: layer.left,
+                top: layer.top,
+                width: layer.width,
+                transform: `translate3d(${layerOffsets[index]?.x ?? 0}px, ${layerOffsets[index]?.y ?? 0}px, 0) rotate(${layer.rotate}deg)`,
+                transformOrigin: "center center",
+                transition: parallaxEnabled
+                  ? "transform 0.3s ease-out"
+                  : undefined,
+              }}
+            >
+              <Image
+                src={layer.src}
+                alt={layer.alt}
+                width={828}
+                height={400}
+                className="h-auto w-full select-none"
+                draggable={false}
+                priority={introComplete}
+              />
+            </div>
+          ))}
+        </div>
 
         <div className="relative z-10 mx-auto flex min-h-[calc(100vh-12rem)] max-w-[500px] flex-col items-center justify-center gap-10 pt-16 text-center">
           <p className="text-sm leading-relaxed text-[#1A1A1A] md:text-base md:leading-[1.6]">

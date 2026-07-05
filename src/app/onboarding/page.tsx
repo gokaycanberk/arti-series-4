@@ -13,7 +13,6 @@ import { MarathonResults } from "@/components/marathon-results/MarathonResults";
 import { computeMarathonStep, getMarathonRepeats } from "@/lib/marathon";
 import { getMarathonDevConfig } from "@/lib/marathonDev";
 import { pickGradientGuruSession } from "@/lib/gradientGuruVariations";
-import { getGameById } from "@/lib/games";
 import { useGameStore } from "@/stores/gameStore";
 
 type Phase = "picking" | "transitioning" | "game" | "results";
@@ -28,6 +27,7 @@ type MarathonEntry = {
     shellReady: boolean;
     onAnswer: (correct: boolean) => void;
     onGameStart: () => void;
+    onIntroComplete: () => void;
     addRoundScore: (points: number) => void;
     onGameComplete?: () => void;
     round: number;
@@ -114,7 +114,6 @@ export default function OnboardingPage() {
   }, []);
 
   const activeGame = MARATHON_GAMES[gameIndex] ?? MARATHON_GAMES[0]!;
-  const activeGameMeta = getGameById(activeGame.resetKey);
   const ActiveComponent = activeGame.Component;
   const avatarFaceSrc = useGameStore((s) => s.avatarFaceSrc);
 
@@ -220,7 +219,7 @@ export default function OnboardingPage() {
         <GameShell
           resetKey={`${activeGame.resetKey}-${gameIndex}-${attemptIndex}`}
           gameName={activeGame.name}
-          description={activeGameMeta?.description}
+          description={undefined}
           duration={activeGame.duration}
           marathonStep={completedRounds}
           initialScore={marathonScore}
@@ -233,6 +232,7 @@ export default function OnboardingPage() {
             addRoundScore,
             endGame,
             startGame,
+            onIntroComplete,
             round,
             timeLeft,
           }: GameShellChildState) => (
@@ -243,27 +243,29 @@ export default function OnboardingPage() {
               shellReady={shellReady}
               onAnswer={onAnswer}
               onGameStart={startGame}
+              onIntroComplete={onIntroComplete}
               addRoundScore={addRoundScore}
               onGameComplete={handleGameComplete}
               round={round}
               timeLeft={timeLeft}
               {...(activeGame.resetKey === "optical-panic"
-                ? { sequenceIndex: attemptIndex }
+                ? { sequenceIndex: attemptIndex, attemptIndex }
                 : {})}
               {...(activeGame.resetKey === "retina-check"
-                ? { sequenceIndex: attemptIndex }
+                ? { sequenceIndex: attemptIndex, attemptIndex }
                 : {})}
               {...(activeGame.resetKey === "bezier-brain"
-                ? { sequenceIndex: attemptIndex }
+                ? { sequenceIndex: attemptIndex, attemptIndex }
                 : {})}
               {...(activeGame.resetKey === "gradient-guru"
                 ? {
                     sequenceIndex: attemptIndex,
+                    attemptIndex,
                     sessionPicks: gradientSessionPicks,
                   }
                 : {})}
               {...(activeGame.resetKey === "untitled-project"
-                ? { endGame }
+                ? { endGame, attemptIndex }
                 : {})}
             />
           )}

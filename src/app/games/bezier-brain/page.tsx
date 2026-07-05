@@ -50,16 +50,19 @@ function BezierBrainPageContent() {
           onAnswer,
           addRoundScore,
           startGame,
+          onIntroComplete,
           round,
           timeLeft,
         }: GameShellChildState) => (
           <BezierBrain
             gameKey={`${GAME_ID}-${activeChar.id}-${replayKey}`}
             sequenceIndex={charIndex}
+            attemptIndex={roundIndex}
             isPlaying={isPlaying}
             shellReady={shellReady}
             onAnswer={onAnswer}
             onGameStart={startGame}
+            onIntroComplete={onIntroComplete}
             addRoundScore={addRoundScore}
             onGameComplete={() => {
               if (urlPinnedIndex !== null) {

@@ -31,6 +31,7 @@ export default function RetinaCheckPage() {
           onAnswer,
           addRoundScore,
           startGame,
+          onIntroComplete,
           round,
           timeLeft,
         }: GameShellChildState) => (
@@ -41,6 +42,7 @@ export default function RetinaCheckPage() {
             shellReady={shellReady}
             onAnswer={onAnswer}
             onGameStart={startGame}
+            onIntroComplete={onIntroComplete}
             addRoundScore={addRoundScore}
             onGameComplete={() => setShapeRound((prev) => prev + 1)}
             round={round}

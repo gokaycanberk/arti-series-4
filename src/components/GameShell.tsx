@@ -33,6 +33,8 @@ export type GameShellChildState = {
   setLiveScoreGetter: (getter: () => number) => void;
   endGame: () => void;
   startGame: () => void;
+  /** Intro kartı indikten sonra sol paneli göster */
+  onIntroComplete: () => void;
 };
 
 interface GameShellProps {
@@ -73,6 +75,7 @@ export function GameShell({
   const [timeLeft, setTimeLeft] = useState(duration);
   const [isPlaying, setIsPlaying] = useState(false);
   const [shellReady, setShellReady] = useState(false);
+  const [introActive, setIntroActive] = useState(true);
   const [, setLiveScoreGetter] = useState<(() => number) | null>(null);
   const shellEnteredRef = useRef(false);
   const initialScoreRef = useRef(initialScore);
@@ -97,10 +100,23 @@ export function GameShell({
     setRound(initialRound);
     setTimeLeft(duration);
     setIsPlaying(false);
+    setIntroActive(true);
     if (shellEnteredRef.current) {
       setShellReady(true);
     }
   }, [resetKey, duration, initialRound]);
+
+  const onIntroComplete = useCallback(() => {
+    setIntroActive(false);
+    if (!description) return;
+    const leftPanel = document.getElementById("gs-left-panel");
+    if (!leftPanel) return;
+    gsap.fromTo(
+      leftPanel,
+      { opacity: 0, x: -36 },
+      { opacity: 1, x: 0, duration: 1.05, ease: "power3.out" },
+    );
+  }, [description]);
 
   const onAnswer = useCallback(() => {
     setRound((prev) => prev + 1);
@@ -153,21 +169,13 @@ export function GameShell({
         { x: 0, opacity: 1, duration: 0.7, ease: "power3.out" },
         0.35,
       );
-    if (description) {
-      tl.fromTo(
-        "#gs-left-panel",
-        { x: -40, opacity: 0 },
-        { x: 0, opacity: 1, duration: 0.7, ease: "power3.out" },
-        0.35,
-      );
-    }
     tl.fromTo(
       "#gs-game-area",
       { y: 40, opacity: 0 },
       { y: 0, opacity: 1, duration: 0.7 },
       0.6,
     );
-  }, [description]);
+  }, []);
 
   const formatTime = (seconds: number) => {
     const m = Math.floor(seconds / 60)
@@ -196,20 +204,15 @@ export function GameShell({
             top: SHELL_LOGO_TOP,
             width: SHELL_LOGO_WIDTH,
             height: SHELL_LOGO_HEIGHT,
-            backgroundColor: "#C4C4C4",
             zIndex: 60,
           }}
         >
-          <span
-            className="text-center text-white"
-            style={{
-              fontFamily: "var(--font-planc), serif",
-              fontSize: 27,
-              lineHeight: "normal",
-            }}
-          >
-            LOGO GELECEK
-          </span>
+          {/* eslint-disable-next-line @next/next/no-img-element -- animated brand logo */}
+          <img
+            src="/layers/goodeyelogo.gif"
+            alt="Good Eye Club"
+            className="pointer-events-none h-full w-full select-none object-contain"
+          />
         </div>
 
         <div
@@ -231,7 +234,7 @@ export function GameShell({
         className="relative min-h-0 flex-1"
         style={{ opacity: 0 }}
       >
-        {description ? (
+        {description && !introActive ? (
           <div
             id="gs-left-panel"
             className="pointer-events-none absolute inset-0"
@@ -348,6 +351,7 @@ export function GameShell({
               setLiveScoreGetter: registerLiveScoreGetter,
               endGame,
               startGame,
+              onIntroComplete,
             })}
           </div>
         ) : (
@@ -359,7 +363,12 @@ export function GameShell({
       <div
         id="gs-site-footer"
         className="absolute bottom-4 flex flex-col items-end gap-0.5"
-        style={{ right: SHELL_PANEL_INSET_X, zIndex: 60 }}
+        style={{
+          right: SHELL_PANEL_INSET_X,
+          zIndex: 60,
+          opacity: introActive ? 0 : 1,
+          transition: "opacity 0.4s ease",
+        }}
       >
         <span className="text-[9px] text-[#999]">created by</span>
         <a

@@ -1,10 +1,23 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import ScoreSideReveal from "@/components/games/ScoreSideReveal";
+import { GameDescBox } from "@/components/GameDescBox";
+import { GameIntroOverlay } from "@/components/GameIntroOverlay";
 import { scoreFromUntitledSaves } from "@/components/games/scoreUtils";
+import {
+  introPendingPhase,
+  prepareGameContentHidden,
+  runGameContentReveal,
+  runIntroCardTimeline,
+  shouldSkipIntroCard,
+} from "@/lib/gameIntro";
 import { randomIntInclusive } from "@/lib/scoring";
-import { SHELL_GAME_SAFE_INSET, SHELL_GAME_TOP_OFFSET } from "@/lib/gameShellLayout";
+import {
+  SHELL_PANEL_INSET_X,
+  SHELL_PANEL_TOP,
+  SHELL_SCORE_PANEL_WIDTH,
+} from "@/lib/gameShellLayout";
 
 interface UntitledProjectProps {
   gameKey: string;
@@ -12,6 +25,8 @@ interface UntitledProjectProps {
   shellReady: boolean;
   onAnswer: (correct: boolean) => void;
   onGameStart: () => void;
+  onIntroComplete: () => void;
+  attemptIndex?: number;
   addRoundScore: (points: number) => void;
   onGameComplete?: () => void;
   endGame?: () => void;
@@ -36,20 +51,101 @@ type ProjectFile = {
 };
 
 type ActiveModal = { fileId: number; fileName: string };
+type Phase = "intro" | "playing";
 
 const TOTAL_FILES = 15;
 const TAB_SUFFIX = "@ 23,72 % (RGB/Preview)";
+const DESC_TITLE = "UNTITLED-1";
+const DESC_BODY =
+  "Save as many files as possible before your computer crashes and humbles your creative confidence.";
 
 /** Sekme genişliği (~%) — çarpışma kontrolü için */
 const TAB_W_PCT = 26;
 const TAB_H_PCT = 9;
+const DESC_BOX_WIDTH = 222;
 const MODAL_Z = 100;
 const BASE_TAB_Z = 1;
 
-function randomLayout(peers: ProjectFile[]): TabLayout {
+/** Üst bölgede sol/sağ chrome ile çakışmayı önle (playfield yüksekliğinin %) */
+const TOP_STRICT_ZONE_PCT = 30;
+/** Strict → geniş geçiş bandı (%) */
+const SIDE_RELAX_BAND_PCT = 16;
+/** Alt bölgede kenar yasağını gevşetme (px) */
+const BOTTOM_SIDE_RELAX_PX = 185;
+/** Tam gevşek modda minimum kenar boşluğu (px) */
+const BOTTOM_MIN_SIDE_PX = 18;
+/** Desc/skor satırının altından ek dikey boşluk (px) */
+const TOP_CHROME_CLEARANCE_PX = 88;
+/** Desc kutusu tahmini yüksekliği (px) */
+const DESC_STACK_HEIGHT_PX = 120;
+
+function minTopPct(playfieldHeight: number): number {
+  const h = Math.max(playfieldHeight, 480);
+  const minTopPx = SHELL_PANEL_TOP + DESC_STACK_HEIGHT_PX + TOP_CHROME_CLEARANCE_PX;
+  return Math.min(
+    100 - TAB_H_PCT,
+    Math.max(12, Math.ceil((minTopPx / h) * 100)),
+  );
+}
+
+function sideRelaxFactor(topPct: number, topMinPct: number): number {
+  const strictCeil = Math.max(TOP_STRICT_ZONE_PCT, topMinPct + 4);
+  if (topPct <= strictCeil) return 0;
+  if (topPct >= strictCeil + SIDE_RELAX_BAND_PCT) return 1;
+  return (topPct - strictCeil) / SIDE_RELAX_BAND_PCT;
+}
+
+function tabHorizontalBounds(
+  playfieldWidth: number,
+  topPct: number,
+  topMinPct: number,
+) {
+  const w = Math.max(playfieldWidth, 320);
+  const relax = sideRelaxFactor(topPct, topMinPct);
+
+  const strictLeftPx = SHELL_PANEL_INSET_X + DESC_BOX_WIDTH + 24;
+  const strictRightPx = SHELL_PANEL_INSET_X + SHELL_SCORE_PANEL_WIDTH + 24;
+  const leftPx = Math.max(
+    BOTTOM_MIN_SIDE_PX,
+    strictLeftPx - relax * BOTTOM_SIDE_RELAX_PX,
+  );
+  const rightPx = Math.max(
+    BOTTOM_MIN_SIDE_PX,
+    strictRightPx - relax * BOTTOM_SIDE_RELAX_PX,
+  );
+
+  const minLeft = (leftPx / w) * 100;
+  const maxLeft = 100 - TAB_W_PCT - (rightPx / w) * 100;
+
+  return {
+    minLeft: Math.max(0, minLeft),
+    maxLeft: Math.min(100 - TAB_W_PCT, maxLeft),
+  };
+}
+
+function randomLayout(
+  peers: ProjectFile[],
+  playfieldWidth: number,
+  playfieldHeight: number,
+): TabLayout {
+  const topMin = minTopPct(playfieldHeight);
+  const topMax = 100 - TAB_H_PCT;
+  const strictCeil = Math.max(TOP_STRICT_ZONE_PCT, topMin + 4);
+
   for (let attempt = 0; attempt < 48; attempt++) {
-    const leftPct = randomIntInclusive(0, 100 - TAB_W_PCT);
-    const topPct = randomIntInclusive(0, 100 - TAB_H_PCT);
+    const topPct = randomIntInclusive(topMin, topMax);
+    const { minLeft, maxLeft } = tabHorizontalBounds(
+      playfieldWidth,
+      topPct,
+      topMin,
+    );
+    const leftLo = Math.ceil(minLeft);
+    const leftHi = Math.floor(maxLeft);
+    const leftPct =
+      leftLo <= leftHi
+        ? randomIntInclusive(leftLo, leftHi)
+        : randomIntInclusive(0, 100 - TAB_W_PCT);
+
     const crowded = peers.some((p) => {
       const dx = Math.abs(p.layout.leftPct - leftPct);
       const dy = Math.abs(p.layout.topPct - topPct);
@@ -65,22 +161,42 @@ function randomLayout(peers: ProjectFile[]): TabLayout {
     }
   }
 
+  const topPct = randomIntInclusive(strictCeil + SIDE_RELAX_BAND_PCT, topMax);
+  const { minLeft, maxLeft } = tabHorizontalBounds(
+    playfieldWidth,
+    topPct,
+    minTopPct(playfieldHeight),
+  );
+  const leftLo = Math.ceil(minLeft);
+  const leftHi = Math.floor(maxLeft);
+
   return {
-    leftPct: randomIntInclusive(0, 100 - TAB_W_PCT),
-    topPct: randomIntInclusive(0, 100 - TAB_H_PCT),
+    leftPct: leftLo <= leftHi ? randomIntInclusive(leftLo, leftHi) : 36,
+    topPct,
     slotIndex: randomIntInclusive(0, 999),
     z: randomIntInclusive(1, 24),
   };
 }
 
-function makeInitialFiles(): ProjectFile[] {
+function playfieldSize(ref: HTMLDivElement | null) {
+  const rect = ref?.getBoundingClientRect();
+  return {
+    width: rect?.width ?? window.innerWidth,
+    height: rect?.height ?? window.innerHeight * 0.72,
+  };
+}
+
+function makeInitialFiles(
+  playfieldWidth: number,
+  playfieldHeight: number,
+): ProjectFile[] {
   const out: ProjectFile[] = [];
   for (let i = 0; i < TOTAL_FILES; i++) {
     out.push({
       id: i + 1,
       name: `Untitled-${i + 1}`,
       status: "open",
-      layout: randomLayout(out),
+      layout: randomLayout(out, playfieldWidth, playfieldHeight),
     });
   }
   return out;
@@ -91,13 +207,15 @@ export default function UntitledProject({
   isPlaying,
   shellReady,
   onGameStart,
+  onIntroComplete,
+  attemptIndex,
   addRoundScore,
   onGameComplete,
   endGame,
   round,
   timeLeft,
 }: UntitledProjectProps) {
-  const [files, setFiles] = useState<ProjectFile[]>(() => makeInitialFiles());
+  const [files, setFiles] = useState<ProjectFile[]>([]);
   const [activeModal, setActiveModal] = useState<ActiveModal | null>(null);
   const [savedCount, setSavedCount] = useState(0);
   const [activeTabId, setActiveTabId] = useState<number | null>(null);
@@ -106,17 +224,29 @@ export default function UntitledProject({
   const [scoreOrigin, setScoreOrigin] = useState<{ x: number; y: number } | null>(
     null,
   );
+  const [phase, setPhase] = useState<Phase>("intro");
 
   const saveBtnRef = useRef<HTMLButtonElement>(null);
   const playfieldRef = useRef<HTMLDivElement>(null);
+  const descBoxRef = useRef<HTMLDivElement>(null);
+  const introCardRef = useRef<HTMLDivElement>(null);
   const endedRef = useRef(false);
   const savedCountRef = useRef(0);
   const pendingScoreRef = useRef(0);
   const nextIdRef = useRef(TOTAL_FILES + 1);
   const zTopRef = useRef(BASE_TAB_Z + TOTAL_FILES);
-  const startedRef = useRef(false);
+  const onGameStartRef = useRef(onGameStart);
+  const onIntroCompleteRef = useRef(onIntroComplete);
 
-  const panicMode = isPlaying && timeLeft <= 3;
+  useEffect(() => {
+    onGameStartRef.current = onGameStart;
+  }, [onGameStart]);
+
+  useEffect(() => {
+    onIntroCompleteRef.current = onIntroComplete;
+  }, [onIntroComplete]);
+
+  const panicMode = phase === "playing" && isPlaying && timeLeft <= 3;
 
   useEffect(() => {
     savedCountRef.current = savedCount;
@@ -125,26 +255,64 @@ export default function UntitledProject({
   useEffect(() => {
     if (!shellReady) return;
     endedRef.current = false;
-    startedRef.current = false;
-    savedCountRef.current = 0;
     nextIdRef.current = TOTAL_FILES + 1;
     zTopRef.current = BASE_TAB_Z + TOTAL_FILES;
     queueMicrotask(() => {
+      const { width, height } = playfieldSize(playfieldRef.current);
       setSavedCount(0);
-      setFiles(makeInitialFiles());
+      setFiles(makeInitialFiles(width, height));
       setActiveModal(null);
       setActiveTabId(null);
       setExitingIds(new Set());
       setFlyScore(null);
       setScoreOrigin(null);
+      if (shouldSkipIntroCard(attemptIndex)) {
+        onIntroCompleteRef.current();
+        setPhase("playing");
+      } else {
+        setPhase("intro");
+      }
     });
-  }, [shellReady, gameKey]);
+  }, [shellReady, gameKey, attemptIndex]);
 
   useEffect(() => {
-    if (!shellReady || startedRef.current) return;
-    startedRef.current = true;
-    onGameStart();
-  }, [shellReady, gameKey, onGameStart]);
+    if (!shellReady || phase !== "intro") return;
+
+    const introCard = introCardRef.current;
+    if (!introCard) return;
+
+    if (shouldSkipIntroCard(attemptIndex)) return;
+
+    const tl = runIntroCardTimeline(introCard, () => {
+      onIntroCompleteRef.current();
+      setPhase("playing");
+    });
+
+    return () => {
+      tl.kill();
+    };
+  }, [shellReady, gameKey, phase, attemptIndex]);
+
+  useLayoutEffect(() => {
+    if (phase !== "playing") return;
+    prepareGameContentHidden({
+      desc: descBoxRef.current,
+      board: playfieldRef.current,
+    });
+  }, [phase, gameKey]);
+
+  useEffect(() => {
+    if (phase !== "playing") return;
+
+    const tl = runGameContentReveal(
+      { desc: descBoxRef.current, board: playfieldRef.current },
+      () => onGameStartRef.current(),
+    );
+
+    return () => {
+      tl.kill();
+    };
+  }, [phase, gameKey]);
 
   const resolveScoreOrigin = useCallback(() => {
     const el = playfieldRef.current;
@@ -192,13 +360,14 @@ export default function UntitledProject({
 
         setFiles((prev) => {
           const next = prev.filter((f) => f.id !== fileId);
+          const { width, height } = playfieldSize(playfieldRef.current);
           while (next.length < TOTAL_FILES) {
             const id = nextIdRef.current++;
             next.push({
               id,
               name: `Untitled-${randomIntInclusive(2, 23)}`,
               status: "open",
-              layout: randomLayout(next),
+              layout: randomLayout(next, width, height),
             });
           }
           return next;
@@ -221,7 +390,7 @@ export default function UntitledProject({
   );
 
   const openCloseModal = useCallback((file: ProjectFile) => {
-    if (endedRef.current || activeModal) return;
+    if (phase !== "playing" || endedRef.current || activeModal) return;
     zTopRef.current += 1;
     const nextZ = zTopRef.current;
     setFiles((prev) =>
@@ -231,7 +400,7 @@ export default function UntitledProject({
     );
     setActiveTabId(file.id);
     setActiveModal({ fileId: file.id, fileName: file.name });
-  }, [activeModal]);
+  }, [activeModal, phase]);
 
   useEffect(() => {
     if (!activeModal) return;
@@ -276,18 +445,23 @@ export default function UntitledProject({
     return null;
   }
 
+  const introActive = introPendingPhase(phase);
+
   return (
     <div
-      className={`absolute right-0 bottom-0 left-0 flex min-h-0 flex-col overflow-hidden font-sans transition-shadow duration-300 ${
+      className={`absolute inset-0 overflow-hidden font-sans transition-shadow duration-300 ${
         panicMode
           ? "shadow-[0_0_0_3px_rgba(239,68,68,0.85),inset_0_0_40px_rgba(239,68,68,0.12)]"
           : ""
       }`}
-      style={{
-        top: SHELL_GAME_TOP_OFFSET,
-        backgroundColor: "#D4D4D4",
-      }}
+      style={{ backgroundColor: "#D4D4D4" }}
     >
+      <GameIntroOverlay
+        ref={introCardRef}
+        gameId="untitled-project"
+        description={DESC_BODY}
+      />
+
       {panicMode ? (
         <div
           className="pointer-events-none absolute inset-0 z-[5] animate-pulse ring-2 ring-red-500/70"
@@ -298,13 +472,10 @@ export default function UntitledProject({
 
       <div
         ref={playfieldRef}
-        className="relative min-h-0 flex-1 overflow-hidden"
+        className="absolute inset-0 overflow-hidden"
         style={{
-          backgroundColor: "#D4D4D4",
-          paddingTop: SHELL_GAME_SAFE_INSET.top,
-          paddingLeft: SHELL_GAME_SAFE_INSET.left,
-          paddingRight: SHELL_GAME_SAFE_INSET.right,
-          paddingBottom: SHELL_GAME_SAFE_INSET.bottom,
+          visibility: phase === "intro" ? "hidden" : "visible",
+          pointerEvents: phase === "intro" ? "none" : "auto",
         }}
       >
         {files.map((f) => {
@@ -412,6 +583,19 @@ export default function UntitledProject({
           </div>
         ) : null}
       </div>
+
+      <GameDescBox
+        ref={descBoxRef}
+        title={DESC_TITLE}
+        style={{
+          zIndex: 20,
+          ...(introActive
+            ? { visibility: "hidden", pointerEvents: "none" }
+            : undefined),
+        }}
+      >
+        {DESC_BODY}
+      </GameDescBox>
 
       {flyScore !== null && scoreOrigin && (
         <ScoreSideReveal

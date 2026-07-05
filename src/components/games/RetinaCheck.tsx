@@ -9,7 +9,15 @@ import {
 } from "react";
 import gsap from "gsap";
 import { GameDescBox } from "@/components/GameDescBox";
+import { GameIntroOverlay } from "@/components/GameIntroOverlay";
 import ScoreFlyPopup from "@/components/games/ScoreFlyPopup";
+import {
+  introPendingPhase,
+  prepareGameContentHidden,
+  runGameContentReveal,
+  runIntroCardTimeline,
+  shouldSkipIntroCard,
+} from "@/lib/gameIntro";
 import {
   getRetinaShapeLabel,
   getRetinaShapeStyle,
@@ -24,10 +32,12 @@ interface RetinaCheckProps {
   shellReady: boolean;
   onAnswer: (correct: boolean) => void;
   onGameStart: () => void;
+  onIntroComplete: () => void;
   addRoundScore: (points: number) => void;
   onGameComplete?: () => void;
   /** Test: 0=kare, 1=daire, 2=üçgen … */
   sequenceIndex?: number;
+  attemptIndex?: number;
   round: number;
   timeLeft: number;
 }
@@ -37,7 +47,6 @@ type Side = "left" | "right";
 
 const BASE_SIZE = 132;
 const SIZE_DIFF = 2;
-const INTRO_HOLD = 2;
 const REVEAL_MEET_DURATION = 1.15;
 const REVEAL_ZOOM_DURATION = 1.65;
 const SCORE_AFTER_REVEAL = 800;
@@ -117,9 +126,11 @@ export default function RetinaCheck({
   shellReady,
   onAnswer,
   onGameStart,
+  onIntroComplete,
   addRoundScore,
   onGameComplete,
   sequenceIndex,
+  attemptIndex,
 }: RetinaCheckProps) {
   const [phase, setPhase] = useState<Phase>("waiting");
   const [biggerSide, setBiggerSide] = useState<Side>("left");
@@ -141,8 +152,12 @@ export default function RetinaCheck({
   const revealPendingRef = useRef(false);
   const revealPointsRef = useRef(0);
   const onGameStartRef = useRef(onGameStart);
+  const onIntroCompleteRef = useRef(onIntroComplete);
   useEffect(() => {
     onGameStartRef.current = onGameStart;
+  });
+  useEffect(() => {
+    onIntroCompleteRef.current = onIntroComplete;
   });
   const shapeLabel = getRetinaShapeLabel(variation.shape);
   const isZoomed = usePageZoomPenalty();
@@ -429,114 +444,99 @@ export default function RetinaCheck({
         ),
       );
       setFlyScore(null);
-      setPhase("intro");
+      const introAttempt = attemptIndex ?? sequenceIndex;
+      if (shouldSkipIntroCard(introAttempt)) {
+        onIntroCompleteRef.current();
+        setPhase("playing");
+      } else {
+        setPhase("intro");
+      }
     });
 
     return () => {
       cancelled = true;
     };
-  }, [shellReady, gameKey, sequenceIndex]);
+  }, [shellReady, gameKey, sequenceIndex, attemptIndex]);
 
   useEffect(() => {
     if (!shellReady || phase !== "intro") return;
 
     resetShapeTransforms();
 
-    const skipIntro = sequenceIndex !== undefined && sequenceIndex > 0;
-    if (skipIntro) {
-      queueMicrotask(() => {
-        setPhase("playing");
-        onGameStartRef.current();
-      });
-      return;
-    }
+    if (shouldSkipIntroCard(attemptIndex ?? sequenceIndex)) return;
 
     const card = introCardRef.current;
-    const descBox = descBoxRef.current;
-
-    const tl = gsap.timeline({
-      onComplete: () => {
-        setPhase("playing");
-        onGameStartRef.current();
-      },
+    const tl = runIntroCardTimeline(card, () => {
+      onIntroCompleteRef.current();
+      setPhase("playing");
     });
-
-    if (descBox) {
-      tl.fromTo(
-        descBox,
-        { opacity: 0, y: -8 },
-        { opacity: 1, y: 0, duration: 0.5, ease: "power3.out" },
-        0,
-      );
-    }
-
-    if (card) {
-      tl.fromTo(
-        card,
-        { y: "100vh", opacity: 0 },
-        { y: 0, opacity: 1, duration: 0.8, ease: "back.out(1.2)" },
-        0.12,
-      );
-      tl.to({}, { duration: INTRO_HOLD });
-      tl.to(card, {
-        y: "100vh",
-        opacity: 0,
-        duration: 0.65,
-        ease: "power2.in",
-      });
-    }
 
     return () => {
       tl.kill();
     };
-  }, [shellReady, gameKey, phase, resetShapeTransforms, sequenceIndex]);
+  }, [shellReady, gameKey, phase, resetShapeTransforms, sequenceIndex, attemptIndex]);
 
   useLayoutEffect(() => {
     if (phase !== "playing") return;
     layoutScattered();
+    prepareGameContentHidden({
+      desc: descBoxRef.current,
+      board: boardRef.current,
+    });
+  }, [phase, biggerSide, layoutScattered, gameKey]);
+
+  useEffect(() => {
+    if (phase !== "playing") return;
+
+    const tl = runGameContentReveal(
+      { desc: descBoxRef.current, board: boardRef.current },
+      () => onGameStartRef.current(),
+    );
+
     window.addEventListener("resize", layoutScattered);
-    return () => window.removeEventListener("resize", layoutScattered);
-  }, [phase, biggerSide, layoutScattered]);
+    return () => {
+      tl.kill();
+      window.removeEventListener("resize", layoutScattered);
+    };
+  }, [phase, gameKey, layoutScattered]);
+
+  const introActive = introPendingPhase(phase);
 
   return (
     <div
       className="absolute inset-0 overflow-hidden select-none"
       onContextMenu={(e) => e.preventDefault()}
     >
-      <div
+      <GameIntroOverlay
         ref={introCardRef}
-        className="absolute inset-0 z-30 flex items-center justify-center pointer-events-none"
-        style={{ opacity: 0 }}
-      >
-        <div
-          className="bg-white/95 backdrop-blur-sm rounded-[40px] px-12 py-8 flex flex-col items-center text-center shadow-lg"
-          style={{ maxWidth: "520px" }}
-        >
-          <h2
-            className="font-bold text-[#1A1A1A] mb-3"
-            style={{
-              fontSize: "clamp(28px, 5vw, 42px)",
-              fontFamily: "var(--font-planc), serif",
-            }}
-          >
-            RETINA CHECK
-          </h2>
-          <p
-            className="text-[14px] text-[#555] leading-relaxed max-w-[420px]"
-            style={{ fontFamily: "var(--font-planc), serif" }}
-          >
-            Pick the shape that&apos;s 2px bigger and prove your eyes are
-            unnecessarily calibrated for absolutely no reason.
-          </p>
-        </div>
-      </div>
+        gameId="retina-check"
+        description={
+          "Pick the shape that's 2px bigger and prove your eyes are\nunnecessarily calibrated for absolutely no reason."
+        }
+      />
 
-      <GameDescBox ref={descBoxRef} title="RETINA CHECK">
+      <GameDescBox
+        ref={descBoxRef}
+        title="RETINA CHECK"
+        style={
+          introActive
+            ? { visibility: "hidden", pointerEvents: "none" }
+            : undefined
+        }
+      >
         Pick the shape that&apos;s 2px bigger and prove your eyes are
         unnecessarily calibrated for absolutely no reason.
       </GameDescBox>
 
-      <div ref={boardRef} className="absolute inset-0 z-[1] overflow-hidden">
+      <div
+        ref={boardRef}
+        className="absolute inset-0 z-[1] overflow-hidden"
+        style={
+          introActive
+            ? { visibility: "hidden", pointerEvents: "none" }
+            : undefined
+        }
+      >
         <div
           ref={scoreAnchorRef}
           className="absolute left-1/2 top-[22%] -translate-x-1/2 pointer-events-none z-20"

@@ -3,8 +3,17 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import gsap from "gsap";
 import { GameDescBox } from "@/components/GameDescBox";
+import { GameIntroOverlay } from "@/components/GameIntroOverlay";
 import DoneKeycap from "@/components/DoneKeycap";
 import ScoreSideReveal from "@/components/games/ScoreSideReveal";
+import {
+  GAME_REVEAL_STAGGER,
+  introPendingPhase,
+  prepareGameContentHidden,
+  runGameContentReveal,
+  runIntroCardTimeline,
+  shouldSkipIntroCard,
+} from "@/lib/gameIntro";
 import {
   getBezierCharacter,
   type BezierCharacter,
@@ -16,10 +25,13 @@ interface BezierBrainProps {
   gameKey: string;
   /** Karakter seçimi: 0=S, 1=2, … */
   sequenceIndex?: number;
+  /** Intro kartı — yalnızca ilk etap (0). Varsayılan: sequenceIndex */
+  attemptIndex?: number;
   isPlaying: boolean;
   shellReady: boolean;
   onAnswer: (correct: boolean) => void;
   onGameStart: () => void;
+  onIntroComplete: () => void;
   addRoundScore: (points: number) => void;
   onGameComplete?: () => void;
   round: number;
@@ -46,7 +58,6 @@ const DESC_COPY = {
   body: "Move each anchor point to its correct position on the path then press done and let's see how type nerd you really are.",
 };
 
-const INTRO_HOLD = 2;
 const DOT_RADIUS = 7;
 const GHOST_FADE_DURATION = 1.4;
 const SNAP_START_DELAY = 0.6;
@@ -451,10 +462,12 @@ function posFromT(
 export default function BezierBrain({
   gameKey,
   sequenceIndex = 0,
+  attemptIndex,
   isPlaying,
   shellReady,
   onAnswer,
   onGameStart,
+  onIntroComplete,
   addRoundScore,
   onGameComplete,
   timeLeft,
@@ -498,7 +511,9 @@ export default function BezierBrain({
   const scoreFlyDoneRef = useRef(false);
   const introCardRef = useRef<HTMLDivElement>(null);
   const descBoxRef = useRef<HTMLDivElement>(null);
+  const gameBoardRef = useRef<HTMLDivElement>(null);
   const onGameStartRef = useRef(onGameStart);
+  const onIntroCompleteRef = useRef(onIntroComplete);
 
   useEffect(() => {
     pointsRef.current = points;
@@ -510,6 +525,10 @@ export default function BezierBrain({
 
   useEffect(() => {
     onGameStartRef.current = onGameStart;
+  });
+
+  useEffect(() => {
+    onIntroCompleteRef.current = onIntroComplete;
   });
 
   useLayoutEffect(() => {
@@ -532,7 +551,7 @@ export default function BezierBrain({
     setPathReady(true);
 
     if (letterWrapRef.current) {
-      gsap.set(letterWrapRef.current, { scale: 1, opacity: 1 });
+      gsap.set(letterWrapRef.current, { scale: 1 });
     }
   }, [shellReady, gameKey, character]);
 
@@ -680,9 +699,10 @@ export default function BezierBrain({
   }, [phase, character]);
 
   useEffect(() => {
-    if (!shellReady || !pathReady) return;
+    if (!shellReady) return;
 
     let cancelled = false;
+    const introAttempt = attemptIndex ?? sequenceIndex;
 
     queueMicrotask(() => {
       if (cancelled) return;
@@ -695,69 +715,81 @@ export default function BezierBrain({
       finishTimelineRef.current?.kill();
       setFlyScore(null);
       setGhostOpacity(0);
-      setPhase("intro");
       setPointsOpacity(0);
       setDragIndex(null);
+      if (shouldSkipIntroCard(introAttempt)) {
+        onIntroCompleteRef.current();
+        setPhase("playing");
+      } else {
+        setPhase("intro");
+      }
     });
 
     return () => {
       cancelled = true;
     };
-  }, [shellReady, gameKey, pathReady]);
+  }, [shellReady, gameKey, sequenceIndex, attemptIndex]);
 
   useEffect(() => {
-    if (!shellReady || !pathReady || phase !== "intro") return;
+    if (!shellReady || phase !== "intro") return;
+    if (shouldSkipIntroCard(attemptIndex ?? sequenceIndex)) return;
 
     const card = introCardRef.current;
-    const descBox = descBoxRef.current;
-    const letter = letterRef.current;
-
-    const tl = gsap.timeline();
-    const opacityProxy = { value: 0 };
-
-    if (descBox) {
-      gsap.set(descBox, { opacity: 0, x: -12 });
-      tl.to(descBox, { opacity: 1, x: 0, duration: 0.5, ease: "power3.out" }, 0);
-    }
-
-    if (letter) {
-      gsap.set(letter, { opacity: 0 });
-      tl.to(letter, { opacity: 1, duration: 0.6, ease: "power2.out" }, 0.15);
-    }
-
-    if (card) {
-      tl.fromTo(
-        card,
-        { y: "100vh", opacity: 0 },
-        { y: 0, opacity: 1, duration: 0.8, ease: "back.out(1.2)" },
-        0.12,
-      );
-      tl.to({}, { duration: INTRO_HOLD });
-      tl.to(card, {
-        y: "100vh",
-        opacity: 0,
-        duration: 0.65,
-        ease: "power2.in",
-      });
-    }
-
-    tl.to(opacityProxy, {
-      value: 1,
-      duration: 0.4,
-      ease: "power2.out",
-      onUpdate: () => setPointsOpacity(opacityProxy.value),
-    });
-
-    tl.call(() => {
-      canDragRef.current = true;
+    const tl = runIntroCardTimeline(card, () => {
+      onIntroCompleteRef.current();
       setPhase("playing");
-      onGameStartRef.current();
     });
 
     return () => {
       tl.kill();
     };
-  }, [shellReady, gameKey, pathReady, phase]);
+  }, [shellReady, gameKey, phase, sequenceIndex, attemptIndex]);
+
+  useLayoutEffect(() => {
+    if (phase !== "playing") return;
+    prepareGameContentHidden({
+      desc: descBoxRef.current,
+      board: gameBoardRef.current,
+    });
+    if (letterRef.current) gsap.set(letterRef.current, { opacity: 0 });
+  }, [phase, gameKey]);
+
+  useEffect(() => {
+    if (phase !== "playing") return;
+
+    const opacityProxy = { value: 0 };
+
+    const tl = runGameContentReveal(
+      { desc: descBoxRef.current, board: gameBoardRef.current },
+      () => onGameStartRef.current(),
+    );
+
+    if (letterRef.current) {
+      tl.to(
+        letterRef.current,
+        { opacity: 1, duration: 1.05, ease: "power3.out" },
+        GAME_REVEAL_STAGGER + 0.08,
+      );
+    }
+
+    tl.to(
+      opacityProxy,
+      {
+        value: 1,
+        duration: 0.95,
+        ease: "power3.out",
+        onUpdate: () => setPointsOpacity(opacityProxy.value),
+        onComplete: () => {
+          canDragRef.current = true;
+        },
+      },
+      GAME_REVEAL_STAGGER + 0.2,
+    );
+
+    return () => {
+      tl.kill();
+    };
+  }, [phase, gameKey]);
 
   useEffect(() => {
     if (phase !== "playing" || !isPlaying || timeLeft > 0) return;
@@ -861,43 +893,41 @@ export default function BezierBrain({
     finishGame();
   }, [finishGame]);
 
+  const introActive = introPendingPhase(phase);
+
   return (
     <div
       className="absolute inset-0 overflow-hidden select-none"
       onContextMenu={(e) => e.preventDefault()}
     >
-      <div
+      <GameIntroOverlay
         ref={introCardRef}
-        className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center"
-        style={{ opacity: 0 }}
-      >
-        <div
-          className="flex flex-col items-center rounded-[40px] bg-white/95 px-12 py-8 text-center shadow-lg backdrop-blur-sm"
-          style={{ maxWidth: "520px" }}
-        >
-          <h2
-            className="mb-3 font-bold text-[#1A1A1A]"
-            style={{
-              fontSize: "clamp(28px, 5vw, 42px)",
-              fontFamily: "var(--font-planc), serif",
-            }}
-          >
-            BEZIER BRAIN
-          </h2>
-          <p
-            className="max-w-[420px] text-[14px] leading-relaxed text-[#555]"
-            style={{ fontFamily: "var(--font-planc), serif" }}
-          >
-            {DESC_COPY.body}
-          </p>
-        </div>
-      </div>
+        gameId="bezier-brain"
+        description={DESC_COPY.body}
+      />
 
-      <GameDescBox ref={descBoxRef} title={DESC_COPY.title}>
+      <GameDescBox
+        ref={descBoxRef}
+        title={DESC_COPY.title}
+        style={
+          introActive
+            ? { visibility: "hidden", pointerEvents: "none" }
+            : undefined
+        }
+      >
         {DESC_COPY.body}
       </GameDescBox>
 
-      <div style={{ position: "relative", width: "100%", height: "100%" }}>
+      <div
+        ref={gameBoardRef}
+        style={{
+          position: "relative",
+          width: "100%",
+          height: "100%",
+          visibility: introActive ? "hidden" : "visible",
+          pointerEvents: introActive ? "none" : "auto",
+        }}
+      >
         <div className="absolute inset-0 flex items-center justify-center">
           <div
             ref={letterWrapRef}
@@ -933,7 +963,7 @@ export default function BezierBrain({
               style={{ touchAction: "none", display: "block", overflow: "visible" }}
               aria-label={`Letter ${character.label} outline`}
             >
-              <g ref={letterRef} style={{ opacity: phase === "waiting" ? 0 : 1 }}>
+              <g ref={letterRef} style={{ opacity: 0 }}>
                 <path
                   d={character.path}
                   fill="#E5E5E5"

@@ -23,7 +23,6 @@ export const GameDescBox = forwardRef<HTMLDivElement, GameDescBoxProps>(
         style={{
           top: DESC_BOX_TOP,
           left: DESC_BOX_LEFT,
-          opacity: 0,
           display: "inline-flex",
           padding: "16px 20px",
           flexDirection: "column",

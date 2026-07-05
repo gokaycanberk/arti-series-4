@@ -19,11 +19,9 @@ export default function UntitledProjectPage() {
   }
 
   return (
-    <div className="fixed inset-0 h-screen w-screen overflow-hidden bg-[#E8E8E8]">
+    <div className="fixed inset-0 h-screen w-screen overflow-hidden bg-[#D4D4D4]">
       <GameShell
         resetKey={GAME_ID}
-        gameName={game.name}
-        description={game.description}
         duration={game.duration}
       >
         {({
@@ -33,6 +31,7 @@ export default function UntitledProjectPage() {
           addRoundScore,
           endGame,
           startGame,
+          onIntroComplete,
           round,
           timeLeft,
         }: GameShellChildState) => (
@@ -42,6 +41,7 @@ export default function UntitledProjectPage() {
             shellReady={shellReady}
             onAnswer={onAnswer}
             onGameStart={startGame}
+            onIntroComplete={onIntroComplete}
             addRoundScore={addRoundScore}
             endGame={endGame}
             round={round}

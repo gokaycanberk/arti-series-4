@@ -13,19 +13,19 @@ export const GAME_INTRO_BRANDS: Record<string, GameIntroBrand> = {
   },
   "retina-check": {
     logoSrc: "/game_logos_2/retina_check_logo2.png",
-    fillColor: "#FF8B3D",
+    fillColor: "#FF9869",
   },
   "bezier-brain": {
     logoSrc: "/game_logos_2/bezier_brain_logo_2.png",
-    fillColor: "#FFD100",
+    fillColor: "#FFD52E",
   },
   "gradient-guru": {
     logoSrc: "/game_logos_2/gradient_guru_logo2.png",
-    fillColor: "#9333EA",
+    fillColor: "#9255D4",
   },
   "untitled-project": {
     logoSrc: "/game_logos_2/untitled1_logo_2.png",
-    fillColor: "#47D926",
+    fillColor: "#3AE091",
   },
 };
 

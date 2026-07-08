@@ -6,6 +6,9 @@ const MAX_PER_ROUND = 1000;
 /** Maraton max: (4×3 + 1) × 1000 = 13.000 */
 export const MARATHON_MAX_SCORE = MARATHON_TOTAL_STEPS * MAX_PER_ROUND;
 
+/** Skor paneli basamak sayısı — max skora göre (13.000 → 5) */
+export const MARATHON_SCORE_DIGIT_COUNT = String(MARATHON_MAX_SCORE).length;
+
 /** Halka kademesi eşikleri — toplam skor / max oranı */
 export const RING_TIER_THRESHOLDS = {
   /** %80+ müthiş */

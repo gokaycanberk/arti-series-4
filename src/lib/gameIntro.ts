@@ -7,6 +7,17 @@ export const INTRO_CARD_HEIGHT = 500;
 export const INTRO_HOLD = 2;
 export const INTRO_ENTER_DURATION = 1.1;
 export const INTRO_EXIT_DURATION = 1.0;
+export const INTRO_PLAY_BUTTON_W = 132;
+export const INTRO_PLAY_BUTTON_H = 56;
+/** PressButton 3D gölge payı (DY + OY×2) */
+export const INTRO_PLAY_BUTTON_SLOT_H = INTRO_PLAY_BUTTON_H + 24;
+
+/** Logo ↔ açıklama ↔ PLAY arası dikey boşluk (açıklama–PLAY referans) */
+export const INTRO_CARD_SECTION_GAP = "clamp(16px, 2.5vh, 28px)";
+
+/** Logo görsel yüksekliği — PNG alt boşluğu kırpılır */
+export const INTRO_CARD_LOGO_H = "clamp(64px, 10vh, 110px)";
+
 export const GAME_REVEAL_DURATION = 1.45;
 export const GAME_REVEAL_STAGGER = 0.28;
 
@@ -96,6 +107,49 @@ export function runGameContentReveal(
   return tl;
 }
 
+/** Intro kartı yukarı kayarak girer — PLAY! bekler */
+export function runIntroCardEnter(
+  card: HTMLElement | null,
+  onEntered?: () => void,
+  options?: { skip?: boolean },
+): gsap.core.Timeline {
+  if (!card || options?.skip) {
+    if (card) gsap.set(card, { opacity: 0, y: "100vh" });
+    onEntered?.();
+    return gsap.timeline();
+  }
+
+  return gsap.timeline({ onComplete: onEntered }).fromTo(
+    card,
+    { y: "100vh", opacity: 0 },
+    {
+      y: 0,
+      opacity: 1,
+      duration: INTRO_ENTER_DURATION,
+      ease: "power3.out",
+    },
+  );
+}
+
+/** PLAY! sonrası intro kartı aşağı kayarak çıkar */
+export function runIntroCardExit(
+  card: HTMLElement | null,
+  onComplete: () => void,
+): gsap.core.Timeline {
+  if (!card) {
+    onComplete();
+    return gsap.timeline();
+  }
+
+  return gsap.timeline({ onComplete }).to(card, {
+    y: "100vh",
+    opacity: 0,
+    duration: INTRO_EXIT_DURATION,
+    ease: "power2.in",
+  });
+}
+
+/** @deprecated Otomatik bekleme kaldırıldı — useGameIntroPlay kullanın */
 export function runIntroCardTimeline(
   card: HTMLElement | null,
   onComplete: () => void,
@@ -107,25 +161,8 @@ export function runIntroCardTimeline(
     return gsap.timeline();
   }
 
-  const tl = gsap.timeline({ onComplete });
-
-  tl.fromTo(
-    card,
-    { y: "100vh", opacity: 0 },
-    {
-      y: 0,
-      opacity: 1,
-      duration: INTRO_ENTER_DURATION,
-      ease: "power3.out",
-    },
-  );
-  tl.to({}, { duration: INTRO_HOLD });
-  tl.to(card, {
-    y: "100vh",
-    opacity: 0,
-    duration: INTRO_EXIT_DURATION,
-    ease: "power2.in",
-  });
-
+  const tl = gsap.timeline();
+  tl.add(runIntroCardEnter(card));
+  tl.add(runIntroCardExit(card, onComplete));
   return tl;
 }

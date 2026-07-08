@@ -11,8 +11,10 @@ import {
 
 import {
   MENU_INK,
+  SITE_MENU_BACK_FONT_SIZE,
   SITE_MENU_BACK_RIGHT,
   SITE_MENU_BACK_TOP,
+  SITE_MENU_BACK_WIDTH,
   WHY_BOX_H,
   WHY_BOX_W,
   WHY_BRACKET_SIZE,
@@ -340,11 +342,18 @@ export function WhyPanel() {
         ref={backRef}
         type="button"
         onClick={handleBack}
-        className="why-panel-back fixed cursor-pointer border-0 bg-transparent p-0 opacity-0"
+        className="fixed cursor-pointer border-0 bg-transparent p-0 opacity-0"
         style={{
           top: SITE_MENU_BACK_TOP,
           right: SITE_MENU_BACK_RIGHT,
+          width: SITE_MENU_BACK_WIDTH,
           transform: "translateY(-50%)",
+          fontFamily: "var(--font-planc), Planc, sans-serif",
+          fontSize: SITE_MENU_BACK_FONT_SIZE,
+          fontWeight: 800,
+          lineHeight: 1,
+          color: MENU_INK,
+          textAlign: "right",
         }}
         aria-label="Back to menu"
       >

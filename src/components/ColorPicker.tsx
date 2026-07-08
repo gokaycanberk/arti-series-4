@@ -56,6 +56,7 @@ const AVATAR_SOURCES_DOUBLED = [...AVATAR_SOURCES, ...AVATAR_SOURCES];
 
 const WHEEL_SIZE = 280;
 const WHEEL_RADIUS = WHEEL_SIZE / 2;
+const PICKER_STROKE = "1.5px solid #1A1A1A";
 
 interface FloatingItem {
   src: string;
@@ -349,7 +350,7 @@ export default function ColorPicker({
 
     // === FAZ 1: UI elemanları küçülüp kaybolur ===
     tl.to(
-      "#pick-name-box, #hs-badge, #color-wheel-container, #bottom-row",
+      "#pick-name-box, #color-wheel-container, #bottom-row",
       {
         scale: 0,
         opacity: 0,
@@ -481,30 +482,28 @@ export default function ColorPicker({
       3.3,
     );
 
-    // Face küçülüp sol üste kayar
+    // Face sağa kayarak ekrandan çıkar
+    tl.set(
+      "#face-reveal",
+      {
+        xPercent: -50,
+        yPercent: -50,
+        left: "50%",
+        top: "50%",
+        x: 0,
+        y: 0,
+      },
+      4.15,
+    );
     tl.to(
       "#face-reveal",
       {
-        top: "60px",
-        left: "24px",
-        width: "28px",
-        height: "28px",
-        transform: "translate(0, 0) scale(1)",
-        duration: 0.9,
-        ease: "power3.inOut",
+        x: () => window.innerWidth * 0.52 + 80,
+        scale: 0.55,
+        duration: 0.85,
+        ease: "power3.in",
       },
       4.2,
-    );
-
-    // Face kaybolur ve GameShell mount olur
-    tl.to(
-      "#face-reveal",
-      {
-        opacity: 0,
-        duration: 0.3,
-        ease: "power2.out",
-      },
-      5.1,
     );
 
     // Geçişi tamamla — ColorPicker unmount, GameShell mount
@@ -513,7 +512,7 @@ export default function ColorPicker({
         onTransitionComplete();
       },
       [],
-      5.4,
+      5.1,
     );
   }, [selectedColor, isAnimating, onTransitionStart, onTransitionComplete]);
 
@@ -574,27 +573,19 @@ export default function ColorPicker({
         {/* Pick your name box */}
         <div
           id="pick-name-box"
-          className="flex items-center justify-center border border-[#1A1A1A] font-planc text-[20px] text-[#1A1A1A]"
+          className="flex items-center justify-center font-planc text-[20px] text-[#1A1A1A]"
           style={{
             width: "360px",
             height: "60px",
             backgroundColor: "#E8E8E8",
             fontWeight: 450,
+            marginTop: "24px",
             marginBottom: "20px",
+            border: PICKER_STROKE,
           }}
         >
-          Pick your name ↯
+          Pick your name below ↓
         </div>
-
-        {/* H:S badge */}
-        {selectedColor && (
-          <div
-            id="hs-badge"
-            className="mb-2 rounded-sm bg-[#1A1A1A] px-2 py-0.5 font-mono text-[10px] text-white"
-          >
-            {selectedColor.h}:{selectedColor.s}
-          </div>
-        )}
 
         {/* Wheel frame + Canvas */}
         <div
@@ -603,7 +594,7 @@ export default function ColorPicker({
           style={{
             width: `${280 + 66 * 2}px`,
             height: `${280 + 66 * 2}px`,
-            border: "1.5px solid #1A1A1A",
+            border: PICKER_STROKE,
           }}
         >
           <div className="relative">
@@ -645,12 +636,12 @@ export default function ColorPicker({
           style={{ marginTop: "20px", height: "89px" }}
         >
           <div
-            className="flex flex-col border border-[#1A1A1A]"
-            style={{ width: "196px", height: "89px" }}
+            className="flex flex-col"
+            style={{ width: "196px", height: "89px", border: PICKER_STROKE }}
           >
             <div
-              className="flex flex-1 items-center justify-center border-b border-[#1A1A1A] bg-[#E8E8E8] font-planc text-[20px] text-[#1A1A1A]"
-              style={{ fontWeight: 450 }}
+              className="flex flex-1 items-center justify-center bg-[#E8E8E8] font-planc text-[20px] text-[#1A1A1A]"
+              style={{ fontWeight: 450, borderBottom: PICKER_STROKE }}
             >
               A.K.A:
             </div>

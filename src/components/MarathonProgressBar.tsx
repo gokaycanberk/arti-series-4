@@ -5,6 +5,7 @@ import {
   marathonAvatarPercent,
   marathonSubdivisions,
 } from "@/lib/marathon";
+import { SHELL_STROKE } from "@/lib/gameShellLayout";
 import { useGameStore } from "@/stores/gameStore";
 
 interface MarathonProgressBarProps {
@@ -30,7 +31,7 @@ export function MarathonProgressBar({ step }: MarathonProgressBarProps) {
         className="relative flex w-full"
         style={{
           height: BAR_HEIGHT,
-          border: "1px solid #1A1A1A",
+          border: SHELL_STROKE,
           background: "linear-gradient(90deg, #DAE7FF 0%, #95A8D2 100%)",
         }}
       >
@@ -79,6 +80,7 @@ export function MarathonProgressBar({ step }: MarathonProgressBarProps) {
       </div>
 
       <div
+        id="gs-progress-avatar"
         className="pointer-events-none absolute top-1/2 -translate-x-1/2 -translate-y-1/2"
         style={{ left: `${avatarLeft}%`, transition: "left 0.5s ease" }}
       >
@@ -86,8 +88,13 @@ export function MarathonProgressBar({ step }: MarathonProgressBarProps) {
         <img
           src={avatarFaceSrc}
           alt=""
-          className="rounded-full border border-[#1A1A1A] bg-[#E5E5E5]"
-          style={{ width: AVATAR_SIZE, height: AVATAR_SIZE }}
+          className="rounded-full bg-[#E5E5E5]"
+          style={{
+            width: AVATAR_SIZE,
+            height: AVATAR_SIZE,
+            border: SHELL_STROKE,
+            boxSizing: "border-box",
+          }}
         />
       </div>
     </div>

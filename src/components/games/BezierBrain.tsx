@@ -11,9 +11,9 @@ import {
   introPendingPhase,
   prepareGameContentHidden,
   runGameContentReveal,
-  runIntroCardTimeline,
   shouldSkipIntroCard,
 } from "@/lib/gameIntro";
+import { useGameIntroPlay } from "@/lib/useGameIntroPlay";
 import {
   getBezierCharacter,
   type BezierCharacter,
@@ -54,7 +54,6 @@ interface GamePoint {
 }
 
 const DESC_COPY = {
-  title: "Bezier Brain",
   body: "Move each anchor point to its correct position on the path then press done and let's see how type nerd you really are.",
 };
 
@@ -509,7 +508,6 @@ export default function BezierBrain({
   const exitStartedRef = useRef(false);
   const letterExitDoneRef = useRef(false);
   const scoreFlyDoneRef = useRef(false);
-  const introCardRef = useRef<HTMLDivElement>(null);
   const descBoxRef = useRef<HTMLDivElement>(null);
   const gameBoardRef = useRef<HTMLDivElement>(null);
   const onGameStartRef = useRef(onGameStart);
@@ -529,6 +527,21 @@ export default function BezierBrain({
 
   useEffect(() => {
     onIntroCompleteRef.current = onIntroComplete;
+  });
+
+  const handleIntroDismiss = useCallback(() => {
+    onIntroCompleteRef.current();
+    setPhase("playing");
+  }, []);
+
+  const {
+    cardRef: introCardRef,
+    playEnabled: introPlayEnabled,
+    playPressed: introPlayPressed,
+    handlePlay: handleIntroPlay,
+  } = useGameIntroPlay({
+    active: shellReady && phase === "intro",
+    onDismiss: handleIntroDismiss,
   });
 
   useLayoutEffect(() => {
@@ -730,21 +743,6 @@ export default function BezierBrain({
     };
   }, [shellReady, gameKey, sequenceIndex, attemptIndex]);
 
-  useEffect(() => {
-    if (!shellReady || phase !== "intro") return;
-    if (shouldSkipIntroCard(attemptIndex ?? sequenceIndex)) return;
-
-    const card = introCardRef.current;
-    const tl = runIntroCardTimeline(card, () => {
-      onIntroCompleteRef.current();
-      setPhase("playing");
-    });
-
-    return () => {
-      tl.kill();
-    };
-  }, [shellReady, gameKey, phase, sequenceIndex, attemptIndex]);
-
   useLayoutEffect(() => {
     if (phase !== "playing") return;
     prepareGameContentHidden({
@@ -904,11 +902,14 @@ export default function BezierBrain({
         ref={introCardRef}
         gameId="bezier-brain"
         description={DESC_COPY.body}
+        playEnabled={introPlayEnabled}
+        playPressed={introPlayPressed}
+        onPlay={handleIntroPlay}
       />
 
       <GameDescBox
         ref={descBoxRef}
-        title={DESC_COPY.title}
+        gameId="bezier-brain"
         style={
           introActive
             ? { visibility: "hidden", pointerEvents: "none" }

@@ -4,6 +4,13 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProp
 import gsap from "gsap";
 import ArrowKeycap, { type ArrowKeycapHandle } from "@/components/ArrowKeycap";
 import { GameDescBox, DESC_BOX_LEFT, DESC_BOX_TOP } from "@/components/GameDescBox";
+import {
+  ARROW_KEYCAP_BODY_H,
+  ARROW_KEYCAP_BODY_W,
+  ARROW_KEYCAP_GAP,
+  DESC_BOX_WIDTH,
+  SHELL_SCORE_PANEL_GAP,
+} from "@/lib/gameShellLayout";
 import { GameIntroOverlay } from "@/components/GameIntroOverlay";
 import ScoreFlyPopup from "@/components/games/ScoreFlyPopup";
 import { scoreFromDistance } from "@/components/games/scoreUtils";
@@ -11,9 +18,9 @@ import {
   introPendingPhase,
   prepareGameContentHidden,
   runGameContentReveal,
-  runIntroCardTimeline,
   shouldSkipIntroCard,
 } from "@/lib/gameIntro";
+import { useGameIntroPlay } from "@/lib/useGameIntroPlay";
 import {
   pickOpticalPanicRound,
   type OpticalPanicRound,
@@ -40,18 +47,27 @@ type Phase = "waiting" | "intro" | "playing" | "landed";
 const WORD_BOTTOM = "14%";
 const SPAWN_OFFSET_FROM_TOP = 8;
 
+/**
+ * Harfin tipografik BASELINE'ı (viewport y). Çizgiyi buna hizalarız: düz tabanlı
+ * harfler (E, R, T) tam oturur; yuvarlak/sivri harfler (O, A, S) overshoot ile
+ * baseline'ı hafifçe geçer — istenen görünüm budur.
+ *
+ * Range.getClientRects font satır kutusunu (baseline + descent) verirdi; bu yüzden
+ * çizgi descent'e kadar iniyor ve düz harflerle arada boşluk kalıyordu. Bunun yerine
+ * baseline'ı sıfır yükseklikli, baseline hizalı bir DOM marker ile ölçüyoruz.
+ */
 function getInkBottom(el: HTMLElement): number {
-  const range = document.createRange();
-  range.selectNodeContents(el);
-  const rects = range.getClientRects();
-  if (rects.length === 0) {
-    return el.getBoundingClientRect().bottom;
-  }
-  let bottom = 0;
-  for (const rect of rects) {
-    bottom = Math.max(bottom, rect.bottom);
-  }
-  return bottom;
+  const fallback = el.getBoundingClientRect().bottom;
+  if (!el.textContent) return fallback;
+
+  const marker = document.createElement("span");
+  marker.style.cssText =
+    "display:inline-block;width:0;height:0;vertical-align:baseline;";
+  el.appendChild(marker);
+  const baseline = marker.getBoundingClientRect().top;
+  el.removeChild(marker);
+
+  return Number.isFinite(baseline) ? baseline : fallback;
 }
 
 export default function OpticalPanic({
@@ -82,7 +98,6 @@ export default function OpticalPanic({
   const correctCharRef = useRef<HTMLDivElement>(null);
   const fallingXRef = useRef(0);
   const animRef = useRef<gsap.core.Tween | null>(null);
-  const introCardRef = useRef<HTMLDivElement>(null);
   const descBoxRef = useRef<HTMLDivElement>(null);
   const gameBoardRef = useRef<HTMLDivElement>(null);
   const controlsRef = useRef<HTMLDivElement>(null);
@@ -106,6 +121,21 @@ export default function OpticalPanic({
   });
   useEffect(() => {
     onIntroCompleteRef.current = onIntroComplete;
+  });
+
+  const handleIntroDismiss = useCallback(() => {
+    onIntroCompleteRef.current();
+    setPhase("playing");
+  }, []);
+
+  const {
+    cardRef: introCardRef,
+    playEnabled: introPlayEnabled,
+    playPressed: introPlayPressed,
+    handlePlay: handleIntroPlay,
+  } = useGameIntroPlay({
+    active: shellReady && phase === "intro",
+    onDismiss: handleIntroDismiss,
   });
 
   const FALL_DURATION = 13;
@@ -286,22 +316,6 @@ export default function OpticalPanic({
       }
     });
   }, [shellReady, gameKey, sequenceIndex, attemptIndex, prepareRound]);
-
-  useEffect(() => {
-    if (!shellReady || phase !== "intro") return;
-    if (shouldSkipIntroCard(attemptIndex ?? sequenceIndex)) return;
-
-    const card = introCardRef.current;
-
-    const tl = runIntroCardTimeline(card, () => {
-      onIntroCompleteRef.current();
-      setPhase("playing");
-    });
-
-    return () => {
-      tl.kill();
-    };
-  }, [shellReady, gameKey, phase, sequenceIndex, attemptIndex]);
 
   useLayoutEffect(() => {
     if (phase !== "playing") return;
@@ -524,23 +538,11 @@ export default function OpticalPanic({
       <GameIntroOverlay
         ref={introCardRef}
         gameId="optical-panic"
-        description={
-          "Use the arrow keys to guide the falling letter into the right spot\nand pray your optical kerning survives the chaos."
-        }
+        description="Use the arrow keys to guide the falling letter into the right spot and pray your optical kerning survives the chaos."
+        playEnabled={introPlayEnabled}
+        playPressed={introPlayPressed}
+        onPlay={handleIntroPlay}
       />
-
-      <GameDescBox
-        ref={descBoxRef}
-        title="OPTICAL PANIC"
-        style={
-          introActive
-            ? { visibility: "hidden", pointerEvents: "none" }
-            : undefined
-        }
-      >
-        Use the arrow keys to guide the falling letter into the right spot then
-        press done and let&apos;s see how type nerd you really are.
-      </GameDescBox>
 
       <div
         ref={gameBoardRef}
@@ -553,20 +555,47 @@ export default function OpticalPanic({
       >
       <div
         className="absolute z-10 flex flex-col"
-        style={{ left: DESC_BOX_LEFT, top: DESC_BOX_TOP + 140, gap: 12 }}
+        style={{
+          left: DESC_BOX_LEFT,
+          top: DESC_BOX_TOP,
+          width: DESC_BOX_WIDTH,
+          gap: SHELL_SCORE_PANEL_GAP,
+        }}
       >
-        <div ref={controlsRef} style={{ display: "flex", gap: "8px" }}>
+        <GameDescBox
+          ref={descBoxRef}
+          gameId="optical-panic"
+          style={{ position: "relative", top: "auto", left: "auto" }}
+        >
+          Use the arrow keys to guide the falling letter into the right spot then
+          press done and let&apos;s see how type nerd you really are.
+        </GameDescBox>
+
+        <div
+          ref={controlsRef}
+          style={{
+            display: "flex",
+            width: "100%",
+            gap: ARROW_KEYCAP_GAP,
+          }}
+        >
           <ArrowKeycap
             ref={leftKeyRef}
             direction="left"
             onPress={moveLeft}
             ariaLabel="Move left"
+            keyWidth={ARROW_KEYCAP_BODY_W}
+            keyHeight={ARROW_KEYCAP_BODY_H}
+            edgeAlign="start"
           />
           <ArrowKeycap
             ref={rightKeyRef}
             direction="right"
             onPress={moveRight}
             ariaLabel="Move right"
+            keyWidth={ARROW_KEYCAP_BODY_W}
+            keyHeight={ARROW_KEYCAP_BODY_H}
+            edgeAlign="end"
           />
         </div>
 
@@ -579,7 +608,8 @@ export default function OpticalPanic({
             transformOrigin: "top left",
             backgroundColor: "#1A1A1A",
             padding: "10px 12px",
-            width: "190px",
+            width: "100%",
+            boxSizing: "border-box",
           }}
         >
           <p

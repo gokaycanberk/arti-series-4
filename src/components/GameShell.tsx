@@ -16,9 +16,13 @@ import {
   SHELL_PANEL_TOP,
   SHELL_PROGRESS_WRAP_TOP,
   SHELL_SCORE_PANEL_GAP,
+  SHELL_SCORE_PANEL_ROW_HEIGHT,
+  SHELL_SCORE_FONT_SIZE,
   SHELL_SCORE_PANEL_WIDTH,
+  SHELL_STROKE,
 } from "@/lib/gameShellLayout";
 import { MARATHON_TOTAL_STEPS } from "@/lib/marathon";
+import { MARATHON_SCORE_DIGIT_COUNT } from "@/lib/scoreRing";
 import { useGameStore } from "@/stores/gameStore";
 
 export type GameShellChildState = {
@@ -39,6 +43,7 @@ export type GameShellChildState = {
 
 interface GameShellProps {
   resetKey?: string;
+  gameId?: string;
   gameName?: string;
   description?: string;
   duration?: number;
@@ -54,6 +59,7 @@ interface GameShellProps {
 
 export function GameShell({
   resetKey,
+  gameId,
   gameName,
   description,
   duration = 30,
@@ -142,8 +148,19 @@ export function GameShell({
     setLiveScoreGetter((prev) => (prev === getter ? prev : getter));
   }, []);
 
+  // İlk giriş — avatar bar hizasında soldan gelir
+  useLayoutEffect(() => {
+    if (shellEnteredRef.current) return;
+    const avatar = document.getElementById("gs-progress-avatar");
+    if (!avatar) return;
+    gsap.set(avatar, { x: -(window.innerWidth * 0.12 + 80), opacity: 1 });
+  }, []);
+
   // Entrance animations
   useEffect(() => {
+    const avatar = document.getElementById("gs-progress-avatar");
+    const isFirstEntry = !shellEnteredRef.current;
+
     const tl = gsap.timeline({
       defaults: { ease: "back.out(1.4)" },
       onComplete: () => {
@@ -159,8 +176,8 @@ export function GameShell({
     )
       .fromTo(
         "#gs-progress-row",
-        { x: -60, opacity: 0 },
-        { x: 0, opacity: 1, duration: 0.7, ease: "power3.out" },
+        { opacity: 0 },
+        { opacity: 1, duration: 0.5, ease: "power2.out" },
         0.2,
       )
       .fromTo(
@@ -169,6 +186,19 @@ export function GameShell({
         { x: 0, opacity: 1, duration: 0.7, ease: "power3.out" },
         0.35,
       );
+
+    if (avatar && isFirstEntry) {
+      tl.to(
+        avatar,
+        {
+          x: 0,
+          duration: 0.75,
+          ease: "power3.out",
+        },
+        0.22,
+      );
+    }
+
     tl.fromTo(
       "#gs-game-area",
       { y: 40, opacity: 0 },
@@ -186,8 +216,9 @@ export function GameShell({
   };
 
   const panelWidth = SHELL_SCORE_PANEL_WIDTH;
-  const scoreDigits = 7;
-  const cellWidth = Math.floor(panelWidth / scoreDigits);
+  const scoreDigits = MARATHON_SCORE_DIGIT_COUNT;
+  const rowHeight = SHELL_SCORE_PANEL_ROW_HEIGHT;
+  const scoreFontSize = SHELL_SCORE_FONT_SIZE;
 
   return (
     <div className="absolute inset-0 flex flex-col bg-[#E8E8E8]">
@@ -241,7 +272,7 @@ export function GameShell({
             style={{ zIndex: SHELL_CHROME_Z, opacity: 0 }}
           >
             <GameDescBox
-              title={gameName ?? ""}
+              gameId={gameId ?? resetKey ?? ""}
               className="pointer-events-auto"
               style={{ opacity: 1 }}
             >
@@ -264,18 +295,20 @@ export function GameShell({
         >
           <div
             id="gs-hex-chip"
-            className="flex items-center justify-center border border-[#1A1A1A]"
+            className="flex items-center justify-center"
             style={{
               backgroundColor: hexChipBg,
               width: `${panelWidth}px`,
-              height: "34px",
+              height: `${rowHeight}px`,
+              border: SHELL_STROKE,
+              boxSizing: "border-box",
             }}
           >
             <span
               style={{
                 fontFamily: "var(--font-planc), serif",
                 fontWeight: 700,
-                fontSize: "13px",
+                fontSize: `${scoreFontSize}px`,
                 color: "#1A1A1A",
               }}
             >
@@ -285,7 +318,7 @@ export function GameShell({
               style={{
                 fontFamily: "var(--font-planc), serif",
                 fontWeight: 450,
-                fontSize: "13px",
+                fontSize: `${scoreFontSize}px`,
                 color: "#1A1A1A",
               }}
             >
@@ -295,25 +328,32 @@ export function GameShell({
 
           <div
             id="gs-score-digits"
-            className="flex"
-            style={{ width: `${panelWidth}px` }}
+            style={{
+              width: `${panelWidth}px`,
+              height: `${rowHeight}px`,
+              border: SHELL_STROKE,
+              boxSizing: "border-box",
+              display: "grid",
+              gridTemplateColumns: `repeat(${scoreDigits}, 1fr)`,
+            }}
           >
             {String(score)
+              .slice(-scoreDigits)
               .padStart(scoreDigits, "0")
               .split("")
               .map((digit, i) => (
                 <div
                   key={i}
-                  className="flex items-center justify-center border border-[#1A1A1A]"
+                  className="flex items-center justify-center"
                   style={{
-                    width: `${cellWidth}px`,
-                    height: "34px",
-                    marginLeft: i > 0 ? -1 : 0,
+                    height: "100%",
+                    borderRight: i < scoreDigits - 1 ? SHELL_STROKE : undefined,
                     backgroundColor: "#E5E5E5",
                     color: "#1A1A1A",
                     fontFamily: "var(--font-planc), serif",
-                    fontSize: "13px",
+                    fontSize: `${scoreFontSize}px`,
                     fontWeight: 500,
+                    boxSizing: "border-box",
                   }}
                 >
                   {digit}
@@ -322,15 +362,17 @@ export function GameShell({
           </div>
 
           <div
-            className="flex items-center justify-center border border-[#1A1A1A]"
+            className="flex items-center justify-center"
             style={{
               width: `${panelWidth}px`,
-              height: "34px",
+              height: `${rowHeight}px`,
               backgroundColor: "#FFFFFF",
               fontFamily: "var(--font-planc), serif",
-              fontSize: "13px",
+              fontSize: `${scoreFontSize}px`,
               fontWeight: 500,
               color: "#1A1A1A",
+              border: SHELL_STROKE,
+              boxSizing: "border-box",
             }}
           >
             {formatTime(timeLeft)}

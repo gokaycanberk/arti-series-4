@@ -5,7 +5,8 @@ import gsap from "gsap";
 import DoneKeycap from "@/components/DoneKeycap";
 import { GameDescBox } from "@/components/GameDescBox";
 import { GameIntroOverlay } from "@/components/GameIntroOverlay";
-import { runIntroCardTimeline, introPendingPhase, shouldSkipIntroCard } from "@/lib/gameIntro";
+import { introPendingPhase, shouldSkipIntroCard } from "@/lib/gameIntro";
+import { useGameIntroPlay } from "@/lib/useGameIntroPlay";
 import ScoreSideReveal, {
   GURU_STACK_STEP,
 } from "@/components/games/ScoreSideReveal";
@@ -48,22 +49,22 @@ interface Point {
 
 /* ─── CONSTANTS ─── */
 const INK = "#1A1A1A";
-const STROKE_W = 1;
 const DOT_SIZE = 35;
 const DOT_R = DOT_SIZE / 2;
 const BOX_W_RATIO = 0.55;
 const BOX_H_RATIO = 0.6;
 const BRACKET_LEN = 24;
 const BRACKET_THICK = 1;
+/** Bracket outer offset so inner arms sit on the gradient border stroke */
+const BRACKET_REST_OFFSET = BRACKET_LEN - BRACKET_THICK;
 const DOT_DROP_START = -160;
 const DOT_DROP_DURATION = 2.4;
 
 /** Guru skor stack görsel merkez düzeltmesi (katmanlar alta doğru) */
 const GURU_SCORE_STACK_LAYERS = 7;
 
-const DESC_TITLE = "GRADIENT GURU";
 const DESC_BODY =
-  "Place the gradient points where you think they belong\nand trust your totally scientific understanding of gradients.";
+  "Place the gradient points where you think they belong and trust your totally scientific understanding of gradients.";
 
 // Plus sign line lengths (equal, forming a symmetric +)
 const PLUS_ARM = 18; // half-length of each arm
@@ -159,7 +160,6 @@ export default function GradientGuru({
   /* ── Refs ── */
   const containerRef = useRef<HTMLDivElement>(null);
   const descRef = useRef<HTMLDivElement>(null);
-  const introCardRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
   const imageRef = useRef<HTMLDivElement>(null);
   const borderRef = useRef<HTMLDivElement>(null);
@@ -173,6 +173,7 @@ export default function GradientGuru({
   const tlRef = useRef<gsap.core.Timeline | null>(null);
   const pendingScore = useRef(0);
   const pendingOk = useRef(false);
+  const roundFinishedRef = useRef(false);
   const guessesAtPlayStartRef = useRef<Point[] | null>(null);
   const onGameStartRef = useRef(onGameStart);
   const onIntroCompleteRef = useRef(onIntroComplete);
@@ -181,6 +182,21 @@ export default function GradientGuru({
   });
   useEffect(() => {
     onIntroCompleteRef.current = onIntroComplete;
+  });
+
+  const handleIntroDismiss = useCallback(() => {
+    onIntroCompleteRef.current();
+    setPhase("setup");
+  }, []);
+
+  const {
+    cardRef: introCardRef,
+    playEnabled: introPlayEnabled,
+    playPressed: introPlayPressed,
+    handlePlay: handleIntroPlay,
+  } = useGameIntroPlay({
+    active: shellReady && phase === "intro",
+    onDismiss: handleIntroDismiss,
   });
 
   const currentRound: GradientGuruRound = useMemo(
@@ -192,6 +208,7 @@ export default function GradientGuru({
   useEffect(() => {
     if (!shellReady) return;
     queueMicrotask(() => {
+      roundFinishedRef.current = false;
       guessesAtPlayStartRef.current = null;
       setGuesses([randomStartPos(), randomStartPos()]);
       setShowReveal(false);
@@ -211,23 +228,6 @@ export default function GradientGuru({
     if (phase !== "playing" || guessesAtPlayStartRef.current !== null) return;
     guessesAtPlayStartRef.current = guesses.map((g) => ({ ...g }));
   }, [phase, guesses]);
-
-  /* ── INTRO CARD ── */
-  useEffect(() => {
-    if (!shellReady || phase !== "intro") return;
-
-    if (shouldSkipIntroCard(attemptIndex ?? sequenceIndex)) return;
-
-    const introCard = introCardRef.current;
-    const tl = runIntroCardTimeline(introCard, () => {
-      onIntroCompleteRef.current();
-      setPhase("setup");
-    });
-
-    return () => {
-      tl.kill();
-    };
-  }, [shellReady, phase, gameKey, sequenceIndex, attemptIndex]);
 
   /* ── SETUP — ilk karede gizle (flash önleme) ── */
   useLayoutEffect(() => {
@@ -309,8 +309,8 @@ export default function GradientGuru({
     tl.to(
       tlEl,
       {
-        top: -BRACKET_LEN,
-        left: -BRACKET_LEN,
+        top: -BRACKET_REST_OFFSET,
+        left: -BRACKET_REST_OFFSET,
         duration: 0.8,
         ease: "power3.out",
       },
@@ -319,8 +319,8 @@ export default function GradientGuru({
     tl.to(
       brEl,
       {
-        top: boxSize.h,
-        left: boxSize.w,
+        top: boxSize.h - BRACKET_THICK,
+        left: boxSize.w - BRACKET_THICK,
         duration: 0.8,
         ease: "power3.out",
       },
@@ -433,59 +433,68 @@ export default function GradientGuru({
     tl.to(plus, { opacity: 1, duration: 0.35 }, 1.3);
   }, [onAnswer, onGameComplete]);
 
-  /* ── DONE handler ── */
-  const handleDone = useCallback(() => {
-    if (phase !== "playing") return;
+  /* ── DONE / time's up ── */
+  const finishRound = useCallback(
+    (opts?: { forceZero?: boolean }) => {
+      if (phase !== "playing" || roundFinishedRef.current) return;
+      roundFinishedRef.current = true;
 
-    const startGuesses = guessesAtPlayStartRef.current;
-    const played =
-      startGuesses !== null &&
-      hasUserMovedGuesses(
-        startGuesses,
-        guesses,
-        boxSize.w,
-        boxSize.h,
-      );
-
-    const totalPts = played
-      ? scoreFromGradientDistance(
-          averageGradientMissPx(
+      let totalPts = 0;
+      if (!opts?.forceZero) {
+        const startGuesses = guessesAtPlayStartRef.current;
+        const played =
+          startGuesses !== null &&
+          hasUserMovedGuesses(
+            startGuesses,
             guesses,
-            [currentRound.start, currentRound.end],
             boxSize.w,
             boxSize.h,
-          ),
-          boxSize.w,
-          boxSize.h,
-        )
-      : 0;
-    pendingScore.current = totalPts;
-    pendingOk.current = totalPts >= 500;
+          );
 
-    setPhase("revealing");
-    setShowReveal(true);
-
-    // After showing reveal, trigger score fly from gradient center
-    gsap.delayedCall(1.5, () => {
-      const stage = stageRef.current;
-      if (stage) {
-        const r = stage.getBoundingClientRect();
-        // Figma: ön katman üstte, 7 katman alta — görsel merkez gradient ortasında
-        const stackDepth = GURU_SCORE_STACK_LAYERS * GURU_STACK_STEP;
-        setScoreOrigin({
-          x: r.left + r.width / 2,
-          y: r.top + r.height / 2 - stackDepth * 0.5 - 72,
-        });
+        totalPts = played
+          ? scoreFromGradientDistance(
+              averageGradientMissPx(
+                guesses,
+                [currentRound.start, currentRound.end],
+                boxSize.w,
+                boxSize.h,
+              ),
+              boxSize.w,
+              boxSize.h,
+            )
+          : 0;
       }
-      setFlyScore(totalPts);
-    });
-  }, [guesses, phase, currentRound, boxSize]);
 
-  /* ── Time's up ── */
+      pendingScore.current = totalPts;
+      pendingOk.current = totalPts >= 500;
+
+      setPhase("revealing");
+      setShowReveal(true);
+
+      gsap.delayedCall(1.5, () => {
+        const stage = stageRef.current;
+        if (stage) {
+          const r = stage.getBoundingClientRect();
+          const stackDepth = GURU_SCORE_STACK_LAYERS * GURU_STACK_STEP;
+          setScoreOrigin({
+            x: r.left + r.width / 2,
+            y: r.top + r.height / 2 - stackDepth * 0.5 - 72,
+          });
+        }
+        setFlyScore(totalPts);
+      });
+    },
+    [guesses, phase, currentRound, boxSize],
+  );
+
+  const handleDone = useCallback(() => {
+    finishRound();
+  }, [finishRound]);
+
   useEffect(() => {
     if (phase !== "playing" || !isPlaying || timeLeft > 0) return;
-    queueMicrotask(() => handleDone());
-  }, [phase, isPlaying, timeLeft, handleDone]);
+    finishRound({ forceZero: true });
+  }, [phase, isPlaying, timeLeft, finishRound]);
 
   /* ── DRAG HANDLERS ── */
   const pointerToNorm = useCallback(
@@ -566,12 +575,15 @@ export default function GradientGuru({
         ref={introCardRef}
         gameId="gradient-guru"
         description={DESC_BODY}
+        playEnabled={introPlayEnabled}
+        playPressed={introPlayPressed}
+        onPlay={handleIntroPlay}
       />
 
       {gameUiVisible ? (
         <GameDescBox
           ref={descRef}
-          title={DESC_TITLE}
+          gameId="gradient-guru"
           style={{ opacity: phase === "setup" ? 0 : 1 }}
         >
           {DESC_BODY}
@@ -617,18 +629,6 @@ export default function GradientGuru({
           className="relative"
           style={{ width: boxSize.w, height: boxSize.h }}
         >
-          {/* Border (thin line around gradient) */}
-          <div
-            ref={borderRef}
-            className="absolute pointer-events-none"
-            style={{
-              inset: 0,
-              border: `${STROKE_W}px solid ${INK}`,
-              transform: "scaleX(0) scaleY(0)",
-              transformOrigin: "center center",
-            }}
-          />
-
           {/* Gradient image (from public folder) */}
           <div
             ref={imageRef}
@@ -638,6 +638,18 @@ export default function GradientGuru({
               backgroundImage: `url(${currentRound.image})`,
               backgroundSize: "cover",
               backgroundPosition: "center",
+              transform: "scaleX(0) scaleY(0)",
+              transformOrigin: "center center",
+            }}
+          />
+
+          {/* Border — same stroke as plus / brackets, drawn above gradient */}
+          <div
+            ref={borderRef}
+            className="absolute pointer-events-none z-1"
+            style={{
+              inset: 0,
+              border: `${BRACKET_THICK}px solid ${INK}`,
               transform: "scaleX(0) scaleY(0)",
               transformOrigin: "center center",
             }}

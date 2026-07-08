@@ -8,6 +8,10 @@ interface PressButtonProps {
   className?: string;
   width?: number;
   height?: number;
+  /** Tıklama sonrası basılı görünümde kal */
+  stayPressed?: boolean;
+  /** İlk tıklamadan sonra basılı kal (intro PLAY!) */
+  holdAfterClick?: boolean;
 }
 
 export default function PressButton({
@@ -16,12 +20,15 @@ export default function PressButton({
   className = "",
   width = 64,
   height = 32,
+  stayPressed = false,
+  holdAfterClick = false,
 }: PressButtonProps) {
   const uid = useId().replace(/:/g, "");
   const svgRef = useRef<SVGSVGElement>(null);
   const progressRef = useRef(0);
   const targetRef = useRef(0);
   const rafRef = useRef<number | null>(null);
+  const latchedRef = useRef(false);
 
   const DX = 8;
   const DY = 8;
@@ -113,21 +120,49 @@ export default function PressButton({
   }, [startAnim]);
 
   const release = useCallback(() => {
+    onClick?.();
+
+    if (holdAfterClick) {
+      latchedRef.current = true;
+      targetRef.current = 1;
+      progressRef.current = 1;
+      draw(1);
+      return;
+    }
+
+    if (stayPressed) {
+      targetRef.current = 1;
+      progressRef.current = 1;
+      draw(1);
+      return;
+    }
+
     targetRef.current = 0;
     startAnim();
-    onClick?.();
-  }, [onClick, startAnim]);
+  }, [onClick, startAnim, stayPressed, holdAfterClick, draw]);
+
+  useEffect(() => {
+    if (stayPressed) {
+      latchedRef.current = true;
+      targetRef.current = 1;
+      progressRef.current = 1;
+      draw(1);
+    }
+  }, [stayPressed, draw]);
+
+  // eslint-disable-next-line react-hooks/refs -- latch değeri render dışı event/efektte güncellenir
+  const isLatched = latchedRef.current || stayPressed;
 
   useEffect(() => {
     draw(0);
 
     const handleMouseUp = () => {
-      if (targetRef.current === 1) {
+      if (targetRef.current === 1 && !latchedRef.current) {
         release();
       }
     };
     const handleTouchEnd = () => {
-      if (targetRef.current === 1) {
+      if (targetRef.current === 1 && !latchedRef.current) {
         release();
       }
     };
@@ -149,12 +184,18 @@ export default function PressButton({
         width={svgW}
         height={svgH}
         viewBox={`0 0 ${svgW} ${svgH}`}
-        style={{ cursor: "pointer", overflow: "visible", display: "block" }}
+        style={{
+          cursor: isLatched ? "default" : "pointer",
+          overflow: "visible",
+          display: "block",
+        }}
         onMouseDown={(event) => {
+          if (isLatched) return;
           event.preventDefault();
           press();
         }}
         onTouchStart={(event) => {
+          if (isLatched) return;
           event.preventDefault();
           press();
         }}

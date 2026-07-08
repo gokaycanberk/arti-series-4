@@ -7,6 +7,7 @@ import {
   useId,
   useImperativeHandle,
   useRef,
+  type CSSProperties,
 } from "react";
 
 export interface ArrowKeycapHandle {
@@ -18,21 +19,17 @@ interface ArrowKeycapProps {
   direction: "left" | "right";
   onPress?: () => void;
   className?: string;
+  style?: CSSProperties;
   ariaLabel?: string;
+  keyWidth?: number;
+  keyHeight?: number;
+  /** Dış kenar SVG boşluğunu kırpar — sol/sağ tuş hizalaması için */
+  edgeAlign?: "start" | "end";
 }
-
-const W = 64;
-const H = 32;
-const DX = 5;
-const DY = 5;
-const OX = 8;
-const OY = 8;
-const BG = "#e5e5e5";
-const INK = "#1a1a1a";
 
 const ArrowKeycap = forwardRef<ArrowKeycapHandle, ArrowKeycapProps>(
   function ArrowKeycap(
-    { direction, onPress, className = "", ariaLabel },
+    { direction, onPress, className = "", style, ariaLabel, keyWidth = 64, keyHeight = 32, edgeAlign },
     ref,
   ) {
     const uid = useId().replace(/:/g, "");
@@ -41,9 +38,22 @@ const ArrowKeycap = forwardRef<ArrowKeycapHandle, ArrowKeycapProps>(
     const targetRef = useRef(0);
     const rafRef = useRef<number | null>(null);
 
-    const svgW = W + DX + OX * 2;
-    const svgH = H + DY + OY * 2;
+    const W = keyWidth;
+    const H = keyHeight;
 
+    const DX = 5;
+    const DY = 5;
+    const OX = 8;
+    const OY = 8;
+    const BG = "#e5e5e5";
+    const INK = "#1a1a1a";
+
+    const svgW =
+      edgeAlign === "start" || edgeAlign === "end"
+        ? W + DX + OX
+        : W + DX + OX * 2;
+    const svgH = H + DY + OY * 2;
+    const viewBoxX = edgeAlign === "start" ? OX : 0;
     const idRight = `ak-right-${uid}`;
     const idBottom = `ak-bottom-${uid}`;
     const idTop = `ak-top-${uid}`;
@@ -102,8 +112,8 @@ const ArrowKeycap = forwardRef<ArrowKeycapHandle, ArrowKeycapProps>(
 
         const cx = ox + W / 2;
         const cy = oy + H / 2;
-        const aw = 16;
-        const ah = 6;
+        const aw = Math.round(W * 0.25);
+        const ah = Math.round(H * 0.19);
         const glyphColor = p > 0.5 ? BG : INK;
 
         if (direction === "left") {
@@ -120,7 +130,7 @@ const ArrowKeycap = forwardRef<ArrowKeycapHandle, ArrowKeycapProps>(
           line.setAttribute("stroke", glyphColor);
         });
       },
-      [direction, idBottom, idHeadB, idHeadT, idOutline, idRight, idShaft, idTop, uid],
+      [direction, idBottom, idHeadB, idHeadT, idOutline, idRight, idShaft, idTop, uid, W, H],
     );
 
     const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
@@ -179,12 +189,12 @@ const ArrowKeycap = forwardRef<ArrowKeycapHandle, ArrowKeycapProps>(
     };
 
   return (
-    <div className={`inline-flex ${className}`}>
+    <div className={`inline-flex ${className}`} style={style}>
       <svg
         ref={svgRef}
         width={svgW}
         height={svgH}
-        viewBox={`0 0 ${svgW} ${svgH}`}
+        viewBox={`${viewBoxX} 0 ${svgW} ${svgH}`}
         style={{ cursor: "pointer", overflow: "visible", display: "block" }}
         role="button"
         aria-label={ariaLabel ?? (direction === "left" ? "Move left" : "Move right")}

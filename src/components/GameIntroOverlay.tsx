@@ -3,12 +3,19 @@
 import Image from "next/image";
 import { forwardRef, type CSSProperties } from "react";
 
+import PressButton from "@/components/PressButton";
 import {
   INTRO_CARD_HEIGHT,
+  INTRO_CARD_LOGO_H,
+  INTRO_CARD_SECTION_GAP,
   INTRO_CARD_WIDTH,
   INTRO_CARD_Y_OFFSET,
+  INTRO_PLAY_BUTTON_H,
+  INTRO_PLAY_BUTTON_SLOT_H,
+  INTRO_PLAY_BUTTON_W,
 } from "@/lib/gameIntro";
 import { getGameIntroBrand } from "@/lib/gameIntroBrands";
+import { SHELL_INK, SHELL_STROKE_WIDTH } from "@/lib/gameShellLayout";
 
 /** Intro kartı arka plan şekli — 1132×509 referans, 1100×500’e ölçeklenir */
 const INTRO_CARD_PATH =
@@ -16,9 +23,19 @@ const INTRO_CARD_PATH =
 
 const INTRO_CARD_VIEWBOX = "0 0 1132 509";
 
+const sectionSpacerStyle: CSSProperties = {
+  flexShrink: 0,
+  width: "100%",
+  height: INTRO_CARD_SECTION_GAP,
+  minHeight: INTRO_CARD_SECTION_GAP,
+};
+
 export interface GameIntroOverlayProps {
   gameId: string;
   description: string;
+  playEnabled?: boolean;
+  playPressed?: boolean;
+  onPlay?: () => void;
   className?: string;
   style?: CSSProperties;
 }
@@ -27,15 +44,29 @@ export interface GameIntroOverlayProps {
  * Oyun başlangıcında yukarı/aşağı kayan intro kartı — Figma Desktop-219 (442:12).
  */
 export const GameIntroOverlay = forwardRef<HTMLDivElement, GameIntroOverlayProps>(
-  function GameIntroOverlay({ gameId, description, className = "", style }, ref) {
+  function GameIntroOverlay(
+    {
+      gameId,
+      description,
+      playEnabled = false,
+      playPressed = false,
+      onPlay,
+      className = "",
+      style,
+    },
+    ref,
+  ) {
     const brand = getGameIntroBrand(gameId);
     if (!brand) return null;
 
     const yOffset = INTRO_CARD_Y_OFFSET[gameId] ?? 0;
+    const canInteract = playEnabled && !playPressed;
 
     return (
       <div
-        className={`pointer-events-none absolute inset-0 z-30 flex items-center justify-center ${className}`}
+        className={`absolute inset-0 z-30 flex items-center justify-center ${
+          canInteract || playPressed ? "pointer-events-auto" : "pointer-events-none"
+        } ${className}`}
       >
         <div
           ref={ref}
@@ -58,35 +89,57 @@ export const GameIntroOverlay = forwardRef<HTMLDivElement, GameIntroOverlayProps
             <path
               d={INTRO_CARD_PATH}
               fill={brand.fillColor}
-              stroke="#000000"
-              strokeWidth={1}
+              stroke={SHELL_INK}
+              strokeWidth={SHELL_STROKE_WIDTH}
               vectorEffect="non-scaling-stroke"
             />
           </svg>
 
-          <div className="relative z-10 flex w-full flex-col items-center justify-center">
-            <Image
-              src={brand.logoSrc}
-              alt=""
-              width={640}
-              height={120}
-              className="h-auto w-[min(580px,72%)] max-w-full select-none object-contain"
-              draggable={false}
-              priority
-            />
+          <div className="relative z-10 flex w-full flex-col items-center">
+            <div
+              className="flex w-full shrink-0 items-start justify-center overflow-hidden leading-none"
+              style={{ height: INTRO_CARD_LOGO_H }}
+            >
+              <Image
+                src={brand.logoSrc}
+                alt=""
+                width={640}
+                height={120}
+                className="block h-full w-auto max-w-[min(580px,72%)] object-contain object-top"
+                draggable={false}
+                priority
+              />
+            </div>
+
+            <div aria-hidden style={sectionSpacerStyle} />
 
             <p
-              className="mx-auto mt-[clamp(12px,2vh,24px)] max-w-[780px] text-black"
+              className="mx-auto max-w-[780px] shrink-0 text-pretty text-black"
               style={{
+                margin: 0,
                 fontFamily: "var(--font-planc), serif",
                 fontWeight: 300,
                 fontSize: "clamp(16px, 2vw, 28px)",
                 lineHeight: 1.35,
-                whiteSpace: "pre-line",
               }}
             >
               {description}
             </p>
+
+            <div aria-hidden style={sectionSpacerStyle} />
+
+            <div
+              className="flex w-full shrink-0 items-start justify-center"
+              style={{ minHeight: INTRO_PLAY_BUTTON_SLOT_H }}
+            >
+              <PressButton
+                label="PLAY!"
+                onClick={onPlay}
+                width={INTRO_PLAY_BUTTON_W}
+                height={INTRO_PLAY_BUTTON_H}
+                holdAfterClick
+              />
+            </div>
           </div>
         </div>
       </div>

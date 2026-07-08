@@ -15,6 +15,18 @@ import {
 import PressButton from "@/components/PressButton";
 import { HOME_GAME_LOGOS } from "@/lib/homeGameLogos";
 
+/** Figma Desktop-213 — MacBook referans; tüm ekranlarda aynı px aralık */
+const INTRO_FINAL_Y = {
+  welcome: -297,
+  tothe: -81,
+  logo: 180,
+} as const;
+
+/** Küçük ekranlarda taşmayı önle — laptop/desktop’ta hep 1 */
+function introCompactScale(viewportH: number): number {
+  return Math.min(1, viewportH / 780);
+}
+
 export default function HomePage() {
   const router = useRouter();
   const introRef = useRef<HTMLDivElement>(null);
@@ -90,11 +102,11 @@ export default function HomePage() {
       gsap.set(topLogo, { xPercent: -50, y: -140, opacity: 0 });
     }
 
-    // Figma Desktop-213 (1080 çerçeve) oranlarına göre — hiçbir öge çakışmaz
-    const vh = window.innerHeight;
-    const welcomeY = -0.33 * vh;
-    const totheY = -0.09 * vh;
-    const logoY = 0.2 * vh;
+    // Sabit px offset — ekran yüksekliğinden bağımsız (780px+ aynı aralık)
+    const scale = introCompactScale(window.innerHeight);
+    const welcomeY = INTRO_FINAL_Y.welcome * scale;
+    const totheY = INTRO_FINAL_Y.tothe * scale;
+    const logoY = INTRO_FINAL_Y.logo * scale;
 
     const tl = gsap.timeline({ delay: 1.2 });
 
@@ -220,7 +232,7 @@ export default function HomePage() {
               alt="Good Eye Club"
               className="pointer-events-none absolute left-1/2 top-1/2 z-10 select-none will-change-transform"
               style={{
-                width: "clamp(220px, 32vw, 500px)",
+                width: "clamp(220px, 32vw, 495px)",
                 height: "auto",
                 transform: "translate(-50%, -50%) rotate(-25deg) scale(1.4)",
               }}
@@ -237,7 +249,7 @@ export default function HomePage() {
                 id="welcome-text"
                 className="font-planc absolute left-1/2 top-1/2 select-none whitespace-nowrap text-center font-bold text-[#FFFFFF] will-change-transform"
                 style={{
-                  fontSize: "clamp(56px, min(14vw, 22vh), 210px)",
+                  fontSize: "clamp(56px, 14vw, 210px)",
                   lineHeight: 0.93,
                   letterSpacing: "0em",
                 }}
@@ -250,7 +262,7 @@ export default function HomePage() {
                 id="tothe-text"
                 className="font-planc absolute left-1/2 top-1/2 select-none whitespace-nowrap text-center font-bold text-[#FFFFFF] will-change-transform"
                 style={{
-                  fontSize: "clamp(56px, min(14vw, 22vh), 210px)",
+                  fontSize: "clamp(56px, 14vw, 210px)",
                   lineHeight: 0.93,
                   letterSpacing: "0em",
                 }}

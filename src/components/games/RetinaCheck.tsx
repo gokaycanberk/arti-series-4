@@ -15,9 +15,9 @@ import {
   introPendingPhase,
   prepareGameContentHidden,
   runGameContentReveal,
-  runIntroCardTimeline,
   shouldSkipIntroCard,
 } from "@/lib/gameIntro";
+import { useGameIntroPlay } from "@/lib/useGameIntroPlay";
 import {
   getRetinaShapeLabel,
   getRetinaShapeStyle,
@@ -77,45 +77,118 @@ function computeRevealLayout(
   const scaledH = maxH * zoomScale;
   const visualCenterX = effectiveW / 2;
   const centerX = bw / 2 - visualCenterX;
-  const originXPercent =
-    meetOverlap > 0 ? (visualCenterX / totalW) * 100 : 50;
+  const originXPercent = meetOverlap > 0 ? (visualCenterX / totalW) * 100 : 50;
   const finalY = bh + scaledH * BOTTOM_CLIP_RATIO - maxH;
 
   return { zoomScale, centerX, finalY, scaledH, originXPercent, effectiveW };
 }
 
-function usePageZoomPenalty() {
+type ZoomBaseline = {
+  scale: number;
+  dpr: number;
+  widthRatio: number;
+};
+
+function readZoomMetrics(): ZoomBaseline {
+  const vv = window.visualViewport;
+  return {
+    scale: vv?.scale ?? 1,
+    dpr: window.devicePixelRatio,
+    widthRatio:
+      window.outerWidth > 0 && window.innerWidth > 0
+        ? window.outerWidth / window.innerWidth
+        : 1,
+  };
+}
+
+/** Oyun başlangıç zoom’una göre baseline al — yalnızca zoom denemesinde uyar */
+function usePageZoomPenalty(active: boolean) {
   const [isZoomed, setIsZoomed] = useState(false);
+  const baselineRef = useRef<ZoomBaseline | null>(null);
+  const caughtRef = useRef(false);
 
   useEffect(() => {
-    const initialDpr = window.devicePixelRatio;
+    if (!active) {
+      baselineRef.current = null;
+      caughtRef.current = false;
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- oyun dışıyken durumu sıfırla
+      setIsZoomed(false);
+      return;
+    }
 
-    const evaluate = () => {
-      let bad = false;
-      const vv = window.visualViewport;
-      if (vv && Math.abs(vv.scale - 1) > 0.06) bad = true;
-      if (Math.abs(window.devicePixelRatio - initialDpr) > 0.05) bad = true;
-      if (
-        window.outerWidth > 0 &&
-        window.innerWidth > 0 &&
-        Math.abs(window.outerWidth / window.innerWidth - 1) > 0.08
-      ) {
-        bad = true;
-      }
-      setIsZoomed(bad);
+    const captureBaseline = () => {
+      baselineRef.current = readZoomMetrics();
     };
 
-    evaluate();
+    const flagCheat = () => {
+      if (caughtRef.current) return;
+      caughtRef.current = true;
+      setIsZoomed(true);
+    };
+
+    const evaluate = () => {
+      if (caughtRef.current) return;
+
+      if (!baselineRef.current) {
+        captureBaseline();
+        return;
+      }
+
+      const cur = readZoomMetrics();
+      const base = baselineRef.current;
+      const changed =
+        Math.abs(cur.scale - base.scale) > 0.04 ||
+        Math.abs(cur.dpr - base.dpr) > 0.04 ||
+        Math.abs(cur.widthRatio - base.widthRatio) > 0.06;
+
+      if (changed) flagCheat();
+    };
+
+    const onWheel = (e: WheelEvent) => {
+      if (e.ctrlKey || e.metaKey) flagCheat();
+    };
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey)) return;
+      if (
+        e.key === "+" ||
+        e.key === "-" ||
+        e.key === "=" ||
+        e.key === "0" ||
+        e.key === "_"
+      ) {
+        flagCheat();
+      }
+    };
+
+    const onGesture = () => flagCheat();
+
+    caughtRef.current = false;
+    setIsZoomed(false);
+    captureBaseline();
+
+    const settleId = window.setTimeout(captureBaseline, 120);
+
     const vv = window.visualViewport;
     vv?.addEventListener("resize", evaluate);
     vv?.addEventListener("scroll", evaluate);
     window.addEventListener("resize", evaluate);
+    window.addEventListener("wheel", onWheel, { passive: true });
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("gesturestart", onGesture);
+    window.addEventListener("gesturechange", onGesture);
+
     return () => {
+      window.clearTimeout(settleId);
       vv?.removeEventListener("resize", evaluate);
       vv?.removeEventListener("scroll", evaluate);
       window.removeEventListener("resize", evaluate);
+      window.removeEventListener("wheel", onWheel);
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("gesturestart", onGesture);
+      window.removeEventListener("gesturechange", onGesture);
     };
-  }, []);
+  }, [active]);
 
   return isZoomed;
 }
@@ -131,6 +204,7 @@ export default function RetinaCheck({
   onGameComplete,
   sequenceIndex,
   attemptIndex,
+  timeLeft,
 }: RetinaCheckProps) {
   const [phase, setPhase] = useState<Phase>("waiting");
   const [biggerSide, setBiggerSide] = useState<Side>("left");
@@ -145,7 +219,6 @@ export default function RetinaCheck({
   const pairRef = useRef<HTMLDivElement>(null);
   const leftShapeRef = useRef<HTMLButtonElement>(null);
   const rightShapeRef = useRef<HTMLButtonElement>(null);
-  const introCardRef = useRef<HTMLDivElement>(null);
   const descBoxRef = useRef<HTMLDivElement>(null);
   const scoreAnchorRef = useRef<HTMLDivElement>(null);
   const pickedRef = useRef(false);
@@ -159,8 +232,24 @@ export default function RetinaCheck({
   useEffect(() => {
     onIntroCompleteRef.current = onIntroComplete;
   });
+
+  const handleIntroDismiss = useCallback(() => {
+    onIntroCompleteRef.current();
+    setPhase("playing");
+  }, []);
+
+  const {
+    cardRef: introCardRef,
+    playEnabled: introPlayEnabled,
+    playPressed: introPlayPressed,
+    handlePlay: handleIntroPlay,
+  } = useGameIntroPlay({
+    active: shellReady && phase === "intro",
+    onDismiss: handleIntroDismiss,
+  });
+
   const shapeLabel = getRetinaShapeLabel(variation.shape);
-  const isZoomed = usePageZoomPenalty();
+  const isZoomed = usePageZoomPenalty(phase === "playing");
   const gsapControlsSize = phase === "reveal" || phase === "scored";
 
   const leftSize = biggerSide === "left" ? BASE_SIZE + SIZE_DIFF : BASE_SIZE;
@@ -239,18 +328,6 @@ export default function RetinaCheck({
     });
   }, [getBoardMetrics]);
 
-  const resetShapeTransforms = useCallback(() => {
-    if (pairRef.current) {
-      gsap.set(pairRef.current, { scale: 1, x: 0, y: 0 });
-    }
-    if (leftShapeRef.current) {
-      gsap.set(leftShapeRef.current, { x: 0, y: 0, width: "", height: "" });
-    }
-    if (rightShapeRef.current) {
-      gsap.set(rightShapeRef.current, { x: 0, y: 0, width: "", height: "" });
-    }
-  }, []);
-
   const runRevealAnimation = useCallback(
     (onDone: () => void) => {
       const board = boardRef.current;
@@ -266,11 +343,7 @@ export default function RetinaCheck({
       const totalW = leftW + rightW;
       const maxH = Math.max(leftW, rightW);
 
-      const meetOverlap = getRevealMeetOverlap(
-        variation.shape,
-        leftW,
-        rightW,
-      );
+      const meetOverlap = getRevealMeetOverlap(variation.shape, leftW, rightW);
       const rightMeetX = leftW - meetOverlap;
       const useDimensionZoom = variation.shape !== "square";
 
@@ -393,6 +466,19 @@ export default function RetinaCheck({
     [biggerSide, isPlaying, isZoomed, phase],
   );
 
+  const handleTimeUp = useCallback(() => {
+    if (phase !== "playing" || !isPlaying || pickedRef.current) return;
+    pickedRef.current = true;
+    revealPendingRef.current = true;
+    revealPointsRef.current = 0;
+    setPhase("reveal");
+  }, [isPlaying, phase]);
+
+  useEffect(() => {
+    if (phase !== "playing" || !isPlaying || timeLeft > 0) return;
+    handleTimeUp();
+  }, [phase, isPlaying, timeLeft, handleTimeUp]);
+
   useLayoutEffect(() => {
     if (phase !== "reveal" || !revealPendingRef.current) return;
     revealPendingRef.current = false;
@@ -458,24 +544,6 @@ export default function RetinaCheck({
     };
   }, [shellReady, gameKey, sequenceIndex, attemptIndex]);
 
-  useEffect(() => {
-    if (!shellReady || phase !== "intro") return;
-
-    resetShapeTransforms();
-
-    if (shouldSkipIntroCard(attemptIndex ?? sequenceIndex)) return;
-
-    const card = introCardRef.current;
-    const tl = runIntroCardTimeline(card, () => {
-      onIntroCompleteRef.current();
-      setPhase("playing");
-    });
-
-    return () => {
-      tl.kill();
-    };
-  }, [shellReady, gameKey, phase, resetShapeTransforms, sequenceIndex, attemptIndex]);
-
   useLayoutEffect(() => {
     if (phase !== "playing") return;
     layoutScattered();
@@ -510,14 +578,15 @@ export default function RetinaCheck({
       <GameIntroOverlay
         ref={introCardRef}
         gameId="retina-check"
-        description={
-          "Pick the shape that's 2px bigger and prove your eyes are\nunnecessarily calibrated for absolutely no reason."
-        }
+        description="Pick the shape that's 2px bigger and prove your eyes are unnecessarily calibrated for absolutely no reason."
+        playEnabled={introPlayEnabled}
+        playPressed={introPlayPressed}
+        onPlay={handleIntroPlay}
       />
 
       <GameDescBox
         ref={descBoxRef}
-        title="RETINA CHECK"
+        gameId="retina-check"
         style={
           introActive
             ? { visibility: "hidden", pointerEvents: "none" }
@@ -572,12 +641,18 @@ export default function RetinaCheck({
       </div>
 
       {isZoomed && phase === "playing" && (
-        <div className="absolute inset-0 z-20 flex items-center justify-center px-8 text-center">
+        <div className="absolute inset-0 z-20 flex items-center justify-center px-4">
           <p
-            className="rounded-lg bg-white/95 px-6 py-4 text-sm font-medium text-[#1A1A1A]"
-            style={{ fontFamily: "var(--font-planc), serif" }}
+            className="retina-cheat-wobble pointer-events-none text-center uppercase text-[#1A1A1A] select-none"
+            style={{
+              fontFamily: "var(--font-planc), serif",
+              fontWeight: 800,
+              fontSize: "clamp(52px, 11vw, 90px)",
+              lineHeight: 0.92,
+              letterSpacing: "-0.03em",
+            }}
           >
-            Zoom yaparak hile yapamazsın
+            THAT&apos;S CHEATING!!1!
           </p>
         </div>
       )}

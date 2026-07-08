@@ -48,25 +48,32 @@ export const WHY_PANEL_DURATION = 2.04;
 export const WHY_TEXT =
   "Gorem ipsum dolor sit amet, consectetur adipiscing elit. Etiam eu turpis molestie, dictum est a, mattis tellus. Sed dignissim, metus nec fringilla accumsan, risus sem sollicitudin lacus, ut interdum t Aliquam in elementum tellus.\n\nCurabitur tempor quis eros tempus lacinia. Nam bibendum pellentesque quam a convallis. Sed ut vulputate nisi. Integer in felis sed leo vestibulum venenatis. Suspendisse quis arcu sem. Gorem ipsum dolor sit amet, consectetur adipiscing elit. Etiam eu turpis molestie, dictum est a, mattis tellus. Sed dignissim,";
 
-/** Figma + toggle */
-export const TOGGLE_BAR_W = 68;
-export const TOGGLE_BAR_H = 12;
-export const TOGGLE_BAR_GAP = 8;
-export const TOGGLE_HIT_SIZE = 68;
+/** Toggle çizgileri — küçültülmüş, orijinal konumda */
+export const TOGGLE_BAR_W = 46;
+export const TOGGLE_BAR_H = 8;
+export const TOGGLE_BAR_GAP = 5;
+export const TOGGLE_HIT_SIZE = 46;
+
+/** Why geri ok — toggle ile orantılı */
+export const SITE_MENU_BACK_FONT_SIZE = 52;
+export const SITE_MENU_BACK_WIDTH = Math.round(TOGGLE_BAR_W * 1.48);
 
 /** Figma Desktop-117/118/126 — köşe chrome */
 export const SITE_CORNER_INSET = 50;
-/** + kesişim merkezi Y (Figma: top 64) */
-export const SITE_MENU_PLUS_CENTER_Y = 64;
-/** Toggle sarmalayıcı — Figma: left 48→50, top 30 */
+
+/** Toggle sarmalayıcı — orijinal Figma konumu */
 export const SITE_MENU_TOGGLE_TOP = 30;
 export const SITE_MENU_TOGGLE_LEFT = SITE_CORNER_INSET;
-/** Kapalı hamburger çizgileri — viewport tepesinden */
+
+/** Kapalı hamburger çizgileri — viewport tepesinden (orijinal Y) */
 export const SITE_MENU_HAMBURGER_BAR1_TOP = SITE_CORNER_INSET;
 export const SITE_MENU_HAMBURGER_BAR2_TOP =
   SITE_CORNER_INSET + TOGGLE_BAR_H + TOGGLE_BAR_GAP;
-/** Açık + yatay çizgi — viewport tepesinden (Figma: 58) */
+
+/** Açık + — orijinal Figma Y */
+export const SITE_MENU_PLUS_CENTER_Y = 64;
 export const SITE_MENU_PLUS_BAR_TOP = 58;
+
 /** Geri ok — + ile aynı yatay eksen, sağ köşe */
 export const SITE_MENU_BACK_TOP = SITE_MENU_PLUS_CENTER_Y;
 export const SITE_MENU_BACK_RIGHT = SITE_CORNER_INSET;

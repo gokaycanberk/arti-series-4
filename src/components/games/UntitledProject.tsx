@@ -9,9 +9,9 @@ import {
   introPendingPhase,
   prepareGameContentHidden,
   runGameContentReveal,
-  runIntroCardTimeline,
   shouldSkipIntroCard,
 } from "@/lib/gameIntro";
+import { useGameIntroPlay } from "@/lib/useGameIntroPlay";
 import { randomIntInclusive } from "@/lib/scoring";
 import {
   SHELL_PANEL_INSET_X,
@@ -55,7 +55,6 @@ type Phase = "intro" | "playing";
 
 const TOTAL_FILES = 15;
 const TAB_SUFFIX = "@ 23,72 % (RGB/Preview)";
-const DESC_TITLE = "UNTITLED-1";
 const DESC_BODY =
   "Save as many files as possible before your computer crashes and humbles your creative confidence.";
 
@@ -229,7 +228,6 @@ export default function UntitledProject({
   const saveBtnRef = useRef<HTMLButtonElement>(null);
   const playfieldRef = useRef<HTMLDivElement>(null);
   const descBoxRef = useRef<HTMLDivElement>(null);
-  const introCardRef = useRef<HTMLDivElement>(null);
   const endedRef = useRef(false);
   const savedCountRef = useRef(0);
   const pendingScoreRef = useRef(0);
@@ -245,6 +243,21 @@ export default function UntitledProject({
   useEffect(() => {
     onIntroCompleteRef.current = onIntroComplete;
   }, [onIntroComplete]);
+
+  const handleIntroDismiss = useCallback(() => {
+    onIntroCompleteRef.current();
+    setPhase("playing");
+  }, []);
+
+  const {
+    cardRef: introCardRef,
+    playEnabled: introPlayEnabled,
+    playPressed: introPlayPressed,
+    handlePlay: handleIntroPlay,
+  } = useGameIntroPlay({
+    active: shellReady && phase === "intro",
+    onDismiss: handleIntroDismiss,
+  });
 
   const panicMode = phase === "playing" && isPlaying && timeLeft <= 3;
 
@@ -274,24 +287,6 @@ export default function UntitledProject({
       }
     });
   }, [shellReady, gameKey, attemptIndex]);
-
-  useEffect(() => {
-    if (!shellReady || phase !== "intro") return;
-
-    const introCard = introCardRef.current;
-    if (!introCard) return;
-
-    if (shouldSkipIntroCard(attemptIndex)) return;
-
-    const tl = runIntroCardTimeline(introCard, () => {
-      onIntroCompleteRef.current();
-      setPhase("playing");
-    });
-
-    return () => {
-      tl.kill();
-    };
-  }, [shellReady, gameKey, phase, attemptIndex]);
 
   useLayoutEffect(() => {
     if (phase !== "playing") return;
@@ -341,7 +336,13 @@ export default function UntitledProject({
   }, [endGame, onGameComplete]);
 
   useEffect(() => {
-    if (!isPlaying || timeLeft > 0 || endedRef.current || flyScore !== null) {
+    if (
+      phase !== "playing" ||
+      !isPlaying ||
+      timeLeft > 0 ||
+      endedRef.current ||
+      flyScore !== null
+    ) {
       return;
     }
     endedRef.current = true;
@@ -350,7 +351,7 @@ export default function UntitledProject({
     pendingScoreRef.current = points;
     setScoreOrigin(resolveScoreOrigin());
     setFlyScore(points);
-  }, [isPlaying, timeLeft, flyScore, resolveScoreOrigin]);
+  }, [phase, isPlaying, timeLeft, flyScore, resolveScoreOrigin]);
 
   const removeFileAfterFade = useCallback(
     (fileId: number, wasSaved: boolean) => {
@@ -460,6 +461,9 @@ export default function UntitledProject({
         ref={introCardRef}
         gameId="untitled-project"
         description={DESC_BODY}
+        playEnabled={introPlayEnabled}
+        playPressed={introPlayPressed}
+        onPlay={handleIntroPlay}
       />
 
       {panicMode ? (
@@ -586,7 +590,7 @@ export default function UntitledProject({
 
       <GameDescBox
         ref={descBoxRef}
-        title={DESC_TITLE}
+        gameId="untitled-project"
         style={{
           zIndex: 20,
           ...(introActive

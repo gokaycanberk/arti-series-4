@@ -2,10 +2,13 @@
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import ScoreSideReveal from "@/components/games/ScoreSideReveal";
+import { UntitledFileTab } from "@/components/games/untitled/UntitledFileTab";
+import { UntitledSaveDialog } from "@/components/games/untitled/UntitledSaveDialog";
 import { GameDescBox } from "@/components/GameDescBox";
 import { GameIntroOverlay } from "@/components/GameIntroOverlay";
 import { scoreFromUntitledSaves } from "@/components/games/scoreUtils";
 import {
+  GAME_REVEAL_STAGGER,
   introPendingPhase,
   prepareGameContentHidden,
   runGameContentReveal,
@@ -46,6 +49,11 @@ type TabLayout = {
 type ProjectFile = {
   id: number;
   name: string;
+  previewDepth: number;
+  spawnDelayMs: number;
+  burstPop: boolean;
+  popOffsetX: number;
+  popOffsetY: number;
   status: FileStatus;
   layout: TabLayout;
 };
@@ -53,37 +61,93 @@ type ProjectFile = {
 type ActiveModal = { fileId: number; fileName: string };
 type Phase = "intro" | "playing";
 
-const TOTAL_FILES = 15;
-const TAB_SUFFIX = "@ 23,72 % (RGB/Preview)";
+const TOTAL_FILES = 22;
+const PREVIEW_DEPTHS = [8, 16, 32] as const;
 const DESC_BODY =
   "Save as many files as possible before your computer crashes and humbles your creative confidence.";
 
 /** Sekme genişliği (~%) — çarpışma kontrolü için */
-const TAB_W_PCT = 26;
-const TAB_H_PCT = 9;
+const TAB_W_PCT = 22;
+const TAB_H_PCT = 6;
 const DESC_BOX_WIDTH = 222;
-const MODAL_Z = 100;
 const BASE_TAB_Z = 1;
 
-/** Üst bölgede sol/sağ chrome ile çakışmayı önle (playfield yüksekliğinin %) */
-const TOP_STRICT_ZONE_PCT = 30;
+function randomPreviewDepth() {
+  return PREVIEW_DEPTHS[randomIntInclusive(0, PREVIEW_DEPTHS.length - 1)];
+}
+
+function formatFileLabel(name: string, previewDepth: number) {
+  return `${name}* (RGB Preview - ${previewDepth}#)`;
+}
+
+function randomPopOffset() {
+  const sign = () => (Math.random() > 0.5 ? 1 : -1);
+  return {
+    x: sign() * randomIntInclusive(10, 22),
+    y: sign() * randomIntInclusive(10, 22),
+  };
+}
+
+function makeFile(
+  id: number,
+  name: string,
+  layout: TabLayout,
+  spawnDelayMs: number,
+  burstPop = false,
+): ProjectFile {
+  const offset = burstPop ? randomPopOffset() : { x: 0, y: 0 };
+  return {
+    id,
+    name,
+    previewDepth: randomPreviewDepth(),
+    spawnDelayMs,
+    burstPop,
+    popOffsetX: offset.x,
+    popOffsetY: offset.y,
+    status: "open",
+    layout,
+  };
+}
+
+/** Üst chrome bölgesinde yatay kısıt (playfield yüksekliğinin %) */
+const TOP_STRICT_ZONE_PCT = 16;
 /** Strict → geniş geçiş bandı (%) */
-const SIDE_RELAX_BAND_PCT = 16;
+const SIDE_RELAX_BAND_PCT = 10;
 /** Alt bölgede kenar yasağını gevşetme (px) */
-const BOTTOM_SIDE_RELAX_PX = 185;
+const BOTTOM_SIDE_RELAX_PX = 240;
 /** Tam gevşek modda minimum kenar boşluğu (px) */
-const BOTTOM_MIN_SIDE_PX = 18;
+const BOTTOM_MIN_SIDE_PX = 10;
 /** Desc/skor satırının altından ek dikey boşluk (px) */
-const TOP_CHROME_CLEARANCE_PX = 88;
+const TOP_CHROME_CLEARANCE_PX = 16;
 /** Desc kutusu tahmini yüksekliği (px) */
-const DESC_STACK_HEIGHT_PX = 120;
+const DESC_STACK_HEIGHT_PX = 100;
+/** Sol desc + sağ skor panelinden yatay güvenlik payı (px) */
+const SIDE_CHROME_GAP_PX = 8;
+/** Skor paneli yığın tahmini yüksekliği (px) — HEX + rakamlar + timer */
+const SCORE_STACK_HEIGHT_PX = 174;
+/** Sekme tahmini yüksekliği (px) */
+const TAB_HEIGHT_PX = 47;
+/** Alt footer (created by stüdyo) için dikey boşluk (px) */
+const BOTTOM_FOOTER_CLEARANCE_PX = 72;
+/** Sağ alt logo köşesi — yatay güvenlik (px) */
+const FOOTER_CORNER_RIGHT_PX = 140;
+/** Alt bölgede footer kısıtının devreye girdiği yükseklik bandı (%) */
+const FOOTER_ZONE_HEIGHT_PCT = 14;
+/** İlk burst — oyun alanı görünür olduktan sonra mount (ms) */
+const BURST_REVEAL_DELAY_MS = Math.round(GAME_REVEAL_STAGGER * 1000) + 160;
+/** İlk burst — kutular arası teker teker belirme aralığı (ms) */
+const BURST_SPAWN_STAGGER_MS = 58;
 
 function minTopPct(playfieldHeight: number): number {
   const h = Math.max(playfieldHeight, 480);
-  const minTopPx = SHELL_PANEL_TOP + DESC_STACK_HEIGHT_PX + TOP_CHROME_CLEARANCE_PX;
+  const chromeBottomPx = Math.max(
+    SHELL_PANEL_TOP + DESC_STACK_HEIGHT_PX,
+    SHELL_PANEL_TOP + SCORE_STACK_HEIGHT_PX,
+  );
+  const minTopPx = chromeBottomPx + TOP_CHROME_CLEARANCE_PX;
   return Math.min(
     100 - TAB_H_PCT,
-    Math.max(12, Math.ceil((minTopPx / h) * 100)),
+    Math.max(8, Math.ceil((minTopPx / h) * 100)),
   );
 }
 
@@ -94,23 +158,45 @@ function sideRelaxFactor(topPct: number, topMinPct: number): number {
   return (topPct - strictCeil) / SIDE_RELAX_BAND_PCT;
 }
 
+function maxTopPct(playfieldHeight: number): number {
+  const h = Math.max(playfieldHeight, 480);
+  const maxTopPx = h - TAB_HEIGHT_PX - BOTTOM_FOOTER_CLEARANCE_PX;
+  return Math.min(100 - TAB_H_PCT, Math.floor((maxTopPx / h) * 100));
+}
+
+function footerStrictFactor(topPct: number, topMax: number): number {
+  const zoneStart = topMax - FOOTER_ZONE_HEIGHT_PCT;
+  if (topPct <= zoneStart) return 0;
+  if (topPct >= topMax) return 1;
+  return (topPct - zoneStart) / FOOTER_ZONE_HEIGHT_PCT;
+}
+
 function tabHorizontalBounds(
   playfieldWidth: number,
   topPct: number,
   topMinPct: number,
+  topMaxPct: number,
 ) {
   const w = Math.max(playfieldWidth, 320);
   const relax = sideRelaxFactor(topPct, topMinPct);
+  const footerFactor = footerStrictFactor(topPct, topMaxPct);
 
-  const strictLeftPx = SHELL_PANEL_INSET_X + DESC_BOX_WIDTH + 24;
-  const strictRightPx = SHELL_PANEL_INSET_X + SHELL_SCORE_PANEL_WIDTH + 24;
+  const strictLeftPx =
+    SHELL_PANEL_INSET_X + DESC_BOX_WIDTH + SIDE_CHROME_GAP_PX;
+  const strictRightPx =
+    SHELL_PANEL_INSET_X + SHELL_SCORE_PANEL_WIDTH + SIDE_CHROME_GAP_PX;
+  const footerRightPx = SHELL_PANEL_INSET_X + FOOTER_CORNER_RIGHT_PX;
   const leftPx = Math.max(
     BOTTOM_MIN_SIDE_PX,
     strictLeftPx - relax * BOTTOM_SIDE_RELAX_PX,
   );
-  const rightPx = Math.max(
+  let rightPx = Math.max(
     BOTTOM_MIN_SIDE_PX,
     strictRightPx - relax * BOTTOM_SIDE_RELAX_PX,
+  );
+  rightPx = Math.max(
+    rightPx,
+    strictRightPx + footerFactor * (footerRightPx - strictRightPx),
   );
 
   const minLeft = (leftPx / w) * 100;
@@ -128,7 +214,7 @@ function randomLayout(
   playfieldHeight: number,
 ): TabLayout {
   const topMin = minTopPct(playfieldHeight);
-  const topMax = 100 - TAB_H_PCT;
+  const topMax = Math.max(topMin, maxTopPct(playfieldHeight));
   const strictCeil = Math.max(TOP_STRICT_ZONE_PCT, topMin + 4);
 
   for (let attempt = 0; attempt < 48; attempt++) {
@@ -137,6 +223,7 @@ function randomLayout(
       playfieldWidth,
       topPct,
       topMin,
+      topMax,
     );
     const leftLo = Math.ceil(minLeft);
     const leftHi = Math.floor(maxLeft);
@@ -148,7 +235,7 @@ function randomLayout(
     const crowded = peers.some((p) => {
       const dx = Math.abs(p.layout.leftPct - leftPct);
       const dy = Math.abs(p.layout.topPct - topPct);
-      return dx < TAB_W_PCT * 0.55 && dy < TAB_H_PCT * 1.1;
+      return dx < TAB_W_PCT * 0.48 && dy < TAB_H_PCT * 1.05;
     });
     if (!crowded) {
       return {
@@ -160,11 +247,15 @@ function randomLayout(
     }
   }
 
-  const topPct = randomIntInclusive(strictCeil + SIDE_RELAX_BAND_PCT, topMax);
+  const topPct = randomIntInclusive(
+    Math.min(strictCeil + SIDE_RELAX_BAND_PCT, topMax),
+    topMax,
+  );
   const { minLeft, maxLeft } = tabHorizontalBounds(
     playfieldWidth,
     topPct,
     minTopPct(playfieldHeight),
+    topMax,
   );
   const leftLo = Math.ceil(minLeft);
   const leftHi = Math.floor(maxLeft);
@@ -191,12 +282,16 @@ function makeInitialFiles(
 ): ProjectFile[] {
   const out: ProjectFile[] = [];
   for (let i = 0; i < TOTAL_FILES; i++) {
-    out.push({
-      id: i + 1,
-      name: `Untitled-${i + 1}`,
-      status: "open",
-      layout: randomLayout(out, playfieldWidth, playfieldHeight),
-    });
+    const layout = randomLayout(out, playfieldWidth, playfieldHeight);
+    out.push(
+      makeFile(
+        i + 1,
+        `Untitled-${i + 1}`,
+        { ...layout, z: BASE_TAB_Z + i },
+        0,
+        true,
+      ),
+    );
   }
   return out;
 }
@@ -217,13 +312,16 @@ export default function UntitledProject({
   const [files, setFiles] = useState<ProjectFile[]>([]);
   const [activeModal, setActiveModal] = useState<ActiveModal | null>(null);
   const [savedCount, setSavedCount] = useState(0);
-  const [activeTabId, setActiveTabId] = useState<number | null>(null);
   const [exitingIds, setExitingIds] = useState<Set<number>>(new Set());
   const [flyScore, setFlyScore] = useState<number | null>(null);
   const [scoreOrigin, setScoreOrigin] = useState<{ x: number; y: number } | null>(
     null,
   );
   const [phase, setPhase] = useState<Phase>("intro");
+  const [tabsRevealed, setTabsRevealed] = useState(false);
+  const [burstVisibleCount, setBurstVisibleCount] = useState(0);
+  const [burstDone, setBurstDone] = useState(false);
+  const burstTimerRef = useRef<number | null>(null);
 
   const saveBtnRef = useRef<HTMLButtonElement>(null);
   const playfieldRef = useRef<HTMLDivElement>(null);
@@ -255,11 +353,9 @@ export default function UntitledProject({
     playPressed: introPlayPressed,
     handlePlay: handleIntroPlay,
   } = useGameIntroPlay({
-    active: phase === "intro",
+    active: shellReady && phase === "intro",
     onDismiss: handleIntroDismiss,
   });
-
-  const panicMode = phase === "playing" && isPlaying && timeLeft <= 3;
 
   useEffect(() => {
     savedCountRef.current = savedCount;
@@ -275,10 +371,12 @@ export default function UntitledProject({
       setSavedCount(0);
       setFiles(makeInitialFiles(width, height));
       setActiveModal(null);
-      setActiveTabId(null);
       setExitingIds(new Set());
       setFlyScore(null);
       setScoreOrigin(null);
+      setTabsRevealed(false);
+      setBurstVisibleCount(0);
+      setBurstDone(false);
       if (shouldSkipIntroCard(attemptIndex)) {
         onIntroCompleteRef.current();
         setPhase("playing");
@@ -288,11 +386,51 @@ export default function UntitledProject({
     });
   }, [shellReady, gameKey, attemptIndex]);
 
+  useEffect(() => {
+    if (phase !== "playing") return;
+
+    const t = window.setTimeout(() => {
+      setBurstVisibleCount(0);
+      setBurstDone(false);
+      setTabsRevealed(true);
+    }, BURST_REVEAL_DELAY_MS);
+
+    return () => window.clearTimeout(t);
+  }, [phase, gameKey]);
+
+  useEffect(() => {
+    if (!tabsRevealed || burstDone) return;
+
+    const total = files.length;
+    if (total === 0) return;
+
+    let count = 0;
+
+    const tick = () => {
+      count += 1;
+      setBurstVisibleCount(count);
+      if (count >= total) {
+        setBurstDone(true);
+        burstTimerRef.current = null;
+        return;
+      }
+      burstTimerRef.current = window.setTimeout(tick, BURST_SPAWN_STAGGER_MS);
+    };
+
+    burstTimerRef.current = window.setTimeout(tick, 0);
+
+    return () => {
+      if (burstTimerRef.current !== null) {
+        window.clearTimeout(burstTimerRef.current);
+        burstTimerRef.current = null;
+      }
+    };
+  }, [tabsRevealed, burstDone, files.length, gameKey]);
+
   useLayoutEffect(() => {
     if (phase !== "playing") return;
     prepareGameContentHidden({
       desc: descBoxRef.current,
-      board: playfieldRef.current,
     });
   }, [phase, gameKey]);
 
@@ -300,7 +438,7 @@ export default function UntitledProject({
     if (phase !== "playing") return;
 
     const tl = runGameContentReveal(
-      { desc: descBoxRef.current, board: playfieldRef.current },
+      { desc: descBoxRef.current },
       () => onGameStartRef.current(),
     );
 
@@ -364,12 +502,19 @@ export default function UntitledProject({
           const { width, height } = playfieldSize(playfieldRef.current);
           while (next.length < TOTAL_FILES) {
             const id = nextIdRef.current++;
-            next.push({
-              id,
-              name: `Untitled-${randomIntInclusive(2, 23)}`,
-              status: "open",
-              layout: randomLayout(next, width, height),
-            });
+            zTopRef.current += 1;
+            next.push(
+              makeFile(
+                id,
+                `Untitled-${randomIntInclusive(2, 23)}`,
+                {
+                  ...randomLayout(next, width, height),
+                  z: zTopRef.current,
+                },
+                randomIntInclusive(0, 35),
+                false,
+              ),
+            );
           }
           return next;
         });
@@ -399,7 +544,6 @@ export default function UntitledProject({
         f.id === file.id ? { ...f, layout: { ...f.layout, z: nextZ } } : f,
       ),
     );
-    setActiveTabId(file.id);
     setActiveModal({ fileId: file.id, fileName: file.name });
   }, [activeModal, phase]);
 
@@ -442,21 +586,10 @@ export default function UntitledProject({
     setActiveModal(null);
   }, []);
 
-  if (!shellReady) {
-    return null;
-  }
-
   const introActive = introPendingPhase(phase);
 
   return (
-    <div
-      className={`absolute inset-0 overflow-hidden font-sans transition-shadow duration-300 ${
-        panicMode
-          ? "shadow-[0_0_0_3px_rgba(239,68,68,0.85),inset_0_0_40px_rgba(239,68,68,0.12)]"
-          : ""
-      }`}
-      style={{ backgroundColor: "#D4D4D4" }}
-    >
+    <div className="absolute inset-0 overflow-hidden font-sans">
       <GameIntroOverlay
         ref={introCardRef}
         gameId="untitled-project"
@@ -466,14 +599,6 @@ export default function UntitledProject({
         onPlay={handleIntroPlay}
       />
 
-      {panicMode ? (
-        <div
-          className="pointer-events-none absolute inset-0 z-[5] animate-pulse ring-2 ring-red-500/70"
-          style={{ animationDuration: "0.9s" }}
-          aria-hidden
-        />
-      ) : null}
-
       <div
         ref={playfieldRef}
         className="absolute inset-0 overflow-hidden"
@@ -482,109 +607,49 @@ export default function UntitledProject({
           pointerEvents: phase === "intro" ? "none" : "auto",
         }}
       >
-        {files.map((f) => {
-          const isActive = activeTabId === f.id;
-          const isExiting = exitingIds.has(f.id);
-          const { leftPct, topPct, z } = f.layout;
-          return (
-            <div
-              key={f.id}
-              className={`absolute flex w-[min(88%,15.5rem)] max-w-[15.5rem] min-h-[36px] items-stretch border border-[#1a1a1a] shadow-md transition-opacity duration-150 ${
-                isExiting ? "pointer-events-none opacity-0" : "opacity-100"
-              }`}
-              style={{
-                left: `${leftPct}%`,
-                top: `${topPct}%`,
-                zIndex: z,
-                backgroundColor: isActive ? "#404040" : "#333333",
-              }}
-            >
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  openCloseModal(f);
-                }}
-                className="flex min-h-[36px] min-w-[36px] shrink-0 items-center justify-center border-r border-[#1a1a1a] text-sm text-white/90 transition-colors hover:bg-red-600/25 hover:text-red-300"
-                aria-label={`${f.name} sekmesini kapat`}
-              >
-                ✕
-              </button>
-              <button
-                type="button"
-                onClick={() => setActiveTabId(f.id)}
-                className="flex min-w-0 flex-1 items-center overflow-hidden px-2 py-1.5 text-left text-[10px] leading-tight text-white sm:text-[11px]"
-              >
-                <span className="truncate" title={`${f.name}*${TAB_SUFFIX}`}>
-                  {f.name}*{TAB_SUFFIX}
-                </span>
-              </button>
-            </div>
-          );
-        })}
+        {phase === "playing" && tabsRevealed
+          ? files.map((f, index) => {
+              if (f.burstPop && !burstDone && index >= burstVisibleCount) {
+                return null;
+              }
+              const isExiting = exitingIds.has(f.id);
+              const { leftPct, topPct, z } = f.layout;
+              return (
+                <UntitledFileTab
+                  key={f.id}
+                  label={formatFileLabel(f.name, f.previewDepth)}
+                  leftPct={leftPct}
+                  topPct={topPct}
+                  z={z}
+                  burstPop={f.burstPop}
+                  popOffsetX={f.popOffsetX}
+                  popOffsetY={f.popOffsetY}
+                  isExiting={isExiting}
+                  onClose={() => openCloseModal(f)}
+                  onFocus={() => {
+                    zTopRef.current += 1;
+                    const nextZ = zTopRef.current;
+                    setFiles((prev) =>
+                      prev.map((item) =>
+                        item.id === f.id
+                          ? { ...item, layout: { ...item.layout, z: nextZ } }
+                          : item,
+                      ),
+                    );
+                  }}
+                />
+              );
+            })
+          : null}
 
         {activeModal ? (
-          <div
-            className="absolute inset-0 flex items-center justify-center px-4 py-6"
-            style={{ backgroundColor: "rgba(0,0,0,0.45)", zIndex: MODAL_Z }}
-            role="presentation"
-          >
-            <div
-              className="w-full max-w-md overflow-hidden rounded-lg p-0 shadow-2xl"
-              style={{ backgroundColor: "#3E3E3E" }}
-              role="dialog"
-              aria-modal="true"
-              aria-labelledby="untitled-save-dialog-desc"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <p className="border-b border-white/10 px-5 py-2 text-[11px] text-white/55">
-                Adobe Illustrator
-              </p>
-              <div className="flex gap-4 px-5 pb-5 pt-4">
-                <div
-                  className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center text-2xl"
-                  aria-hidden
-                >
-                  ⚠️
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p
-                    id="untitled-save-dialog-desc"
-                    className="text-[13px] leading-relaxed text-white/95"
-                  >
-                    {`Save changes to the Adobe Illustrator document '${activeModal.fileName}*' before closing? If you don't save, your changes will be lost.`}
-                  </p>
-                  <div className="mt-6 flex flex-wrap justify-end gap-2">
-                    <button
-                      type="button"
-                      onClick={handleModalDontSave}
-                      className="rounded px-4 py-1.5 text-xs font-medium text-white transition hover:bg-[#555555]"
-                      style={{ backgroundColor: "#454545" }}
-                    >
-                      Don&apos;t Save
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleModalCancel}
-                      className="rounded px-4 py-1.5 text-xs font-medium text-white transition hover:bg-[#555555]"
-                      style={{ backgroundColor: "#454545" }}
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      ref={saveBtnRef}
-                      type="button"
-                      onClick={handleModalSave}
-                      className="rounded px-4 py-1.5 text-xs font-medium text-white transition hover:bg-[#005a9e]"
-                      style={{ backgroundColor: "#0078D4" }}
-                    >
-                      Save
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
+          <UntitledSaveDialog
+            fileName={activeModal.fileName}
+            saveBtnRef={saveBtnRef}
+            onSave={handleModalSave}
+            onDontSave={handleModalDontSave}
+            onCancel={handleModalCancel}
+          />
         ) : null}
       </div>
 

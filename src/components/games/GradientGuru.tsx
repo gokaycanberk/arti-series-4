@@ -57,6 +57,27 @@ const BRACKET_LEN = 24;
 const BRACKET_THICK = 1;
 /** Bracket outer offset so inner arms sit on the gradient border stroke */
 const BRACKET_REST_OFFSET = BRACKET_LEN - BRACKET_THICK;
+
+function bracketOpenTL() {
+  return { left: -BRACKET_REST_OFFSET, top: -BRACKET_REST_OFFSET };
+}
+
+function bracketOpenBR(boxW: number, boxH: number) {
+  // BR çizgileri -BRACKET_THICK offset ile çiziliyor; kutu köşede +1px dışarıda
+  return { left: boxW, top: boxH };
+}
+
+/** Kapalı + — piksel hizalı merkez */
+function closedBracketPositions(boxW: number, boxH: number) {
+  const cx = Math.round(boxW / 2);
+  const cy = Math.round(boxH / 2);
+  return {
+    tlLeft: cx - BRACKET_LEN,
+    tlTop: cy - BRACKET_LEN,
+    brLeft: cx,
+    brTop: cy,
+  };
+}
 const DOT_DROP_START = -160;
 const DOT_DROP_DURATION = 2.4;
 /** Done tuşu — bırakma animasyonu + fade */
@@ -68,9 +89,6 @@ const GURU_SCORE_STACK_LAYERS = 7;
 
 const DESC_BODY =
   "Place the gradient points where you think they belong and trust your totally scientific understanding of gradients.";
-
-// Plus sign line lengths (equal, forming a symmetric +)
-const PLUS_ARM = 18; // half-length of each arm
 
 /* ─── HELPERS ─── */
 const SERVER_BOX_SIZE = { w: 700, h: 420 };
@@ -167,7 +185,6 @@ export default function GradientGuru({
   const stageRef = useRef<HTMLDivElement>(null);
   const imageRef = useRef<HTMLDivElement>(null);
   const borderRef = useRef<HTMLDivElement>(null);
-  const plusRef = useRef<SVGSVGElement>(null);
   const bracketTLRef = useRef<HTMLDivElement>(null);
   const bracketBRRef = useRef<HTMLDivElement>(null);
   const dot0Ref = useRef<HTMLDivElement>(null);
@@ -210,6 +227,11 @@ export default function GradientGuru({
     [sessionPicks, sequenceIndex],
   );
 
+  const closedBrackets = useMemo(
+    () => closedBracketPositions(boxSize.w, boxSize.h),
+    [boxSize],
+  );
+
   /* ── Init on shellReady / gameKey change ── */
   useEffect(() => {
     if (!shellReady) return;
@@ -247,7 +269,6 @@ export default function GradientGuru({
     const firstRound = sequenceIndex === 0;
     const image = imageRef.current;
     const border = borderRef.current;
-    const plus = plusRef.current;
     const tlEl = bracketTLRef.current;
     const brEl = bracketBRRef.current;
     const desc = descRef.current;
@@ -260,16 +281,19 @@ export default function GradientGuru({
     if (border) {
       gsap.set(border, { scaleX: 0, scaleY: 0, transformOrigin: "center center" });
     }
-    if (plus) gsap.set(plus, { opacity: 1 });
     if (tlEl) {
       gsap.set(tlEl, {
-        top: `calc(50% - ${BRACKET_LEN}px)`,
-        left: `calc(50% - ${BRACKET_LEN}px)`,
-        opacity: 0,
+        top: closedBrackets.tlTop,
+        left: closedBrackets.tlLeft,
+        opacity: 1,
       });
     }
     if (brEl) {
-      gsap.set(brEl, { top: "50%", left: "50%", opacity: 0 });
+      gsap.set(brEl, {
+        top: closedBrackets.brTop,
+        left: closedBrackets.brLeft,
+        opacity: 1,
+      });
     }
     if (desc) {
       if (firstRound) gsap.set(desc, { opacity: 0, x: -20 });
@@ -277,7 +301,7 @@ export default function GradientGuru({
     }
     if (d0) gsap.set(d0, { opacity: 0, y: DOT_DROP_START });
     if (d1) gsap.set(d1, { opacity: 0, y: DOT_DROP_START });
-  }, [phase, sequenceIndex, gameKey]);
+  }, [phase, sequenceIndex, gameKey, closedBrackets]);
 
   /* ── SETUP ANIMATION (bracket + gradient) ── */
   useEffect(() => {
@@ -286,14 +310,13 @@ export default function GradientGuru({
     const firstRound = sequenceIndex === 0;
     const image = imageRef.current;
     const border = borderRef.current;
-    const plus = plusRef.current;
     const tlEl = bracketTLRef.current;
     const brEl = bracketBRRef.current;
     const desc = descRef.current;
     const d0 = dot0Ref.current;
     const d1 = dot1Ref.current;
 
-    if (!image || !border || !plus || !tlEl || !brEl) return;
+    if (!image || !border || !tlEl || !brEl) return;
 
     if (sequenceIndex > 0) {
       onIntroCompleteRef.current();
@@ -309,19 +332,19 @@ export default function GradientGuru({
     });
 
     tl.to({}, { duration: 0.5 });
-    tl.to(plus, { opacity: 0, duration: 0.3 }, 0.5);
-    tl.set(tlEl, { opacity: 1 }, 0.6);
-    tl.set(brEl, { opacity: 1 }, 0.6);
 
     if (desc && firstRound) {
       tl.to(desc, { opacity: 1, x: 0, duration: 1.05, ease: "power3.out" }, 0.35);
     }
 
+    const openTL = bracketOpenTL();
+    const openBR = bracketOpenBR(boxSize.w, boxSize.h);
+
     tl.to(
       tlEl,
       {
-        top: -BRACKET_REST_OFFSET,
-        left: -BRACKET_REST_OFFSET,
+        top: openTL.top,
+        left: openTL.left,
         duration: 0.8,
         ease: "power3.out",
       },
@@ -330,8 +353,8 @@ export default function GradientGuru({
     tl.to(
       brEl,
       {
-        top: boxSize.h - BRACKET_THICK,
-        left: boxSize.w - BRACKET_THICK,
+        top: openBR.top,
+        left: openBR.left,
         duration: 0.8,
         ease: "power3.out",
       },
@@ -373,14 +396,13 @@ export default function GradientGuru({
   const collapse = useCallback(() => {
     const image = imageRef.current;
     const border = borderRef.current;
-    const plus = plusRef.current;
     const tlEl = bracketTLRef.current;
     const brEl = bracketBRRef.current;
     const d0 = dot0Ref.current;
     const d1 = dot1Ref.current;
     const revealSvg = revealSvgRef.current;
 
-    if (!image || !border || !plus || !tlEl || !brEl) {
+    if (!image || !border || !tlEl || !brEl) {
       setPhase("done");
       onAnswer(pendingOk.current);
       onGameComplete?.();
@@ -420,8 +442,8 @@ export default function GradientGuru({
     tl.to(
       tlEl,
       {
-        top: `calc(50% - ${BRACKET_LEN}px)`,
-        left: `calc(50% - ${BRACKET_LEN}px)`,
+        top: closedBrackets.tlTop,
+        left: closedBrackets.tlLeft,
         duration: 1.0,
         ease: "power2.inOut",
       },
@@ -430,19 +452,14 @@ export default function GradientGuru({
     tl.to(
       brEl,
       {
-        top: "50%",
-        left: "50%",
+        top: closedBrackets.brTop,
+        left: closedBrackets.brLeft,
         duration: 1.0,
         ease: "power2.inOut",
       },
       0.35,
     );
-
-    // Fade out brackets, fade in plus
-    tl.to(tlEl, { opacity: 0, duration: 0.25 }, 1.25);
-    tl.to(brEl, { opacity: 0, duration: 0.25 }, 1.25);
-    tl.to(plus, { opacity: 1, duration: 0.35 }, 1.3);
-  }, [onAnswer, onGameComplete]);
+  }, [closedBrackets, onAnswer, onGameComplete]);
 
   /* ── DONE / time's up ── */
   const finishRound = useCallback(
@@ -630,34 +647,6 @@ export default function GradientGuru({
       <div className="absolute inset-0 flex min-h-0 flex-col">
         <div className="min-h-0 flex-1" />
         <div className="relative flex shrink-0 items-center justify-center">
-        {/* Plus sign (visible at start and end) */}
-        <svg
-          ref={plusRef}
-          className="absolute pointer-events-none z-10"
-          width={PLUS_ARM * 2 + 2}
-          height={PLUS_ARM * 2 + 2}
-          style={{ opacity: 0 }}
-        >
-          {/* Horizontal line */}
-          <line
-            x1={0}
-            y1={PLUS_ARM + 1}
-            x2={PLUS_ARM * 2 + 2}
-            y2={PLUS_ARM + 1}
-            stroke={INK}
-            strokeWidth={BRACKET_THICK}
-          />
-          {/* Vertical line */}
-          <line
-            x1={PLUS_ARM + 1}
-            y1={0}
-            x2={PLUS_ARM + 1}
-            y2={PLUS_ARM * 2 + 2}
-            stroke={INK}
-            strokeWidth={BRACKET_THICK}
-          />
-        </svg>
-
         <div
           ref={stageRef}
           className="relative"
@@ -677,7 +666,7 @@ export default function GradientGuru({
             }}
           />
 
-          {/* Border — same stroke as plus / brackets, drawn above gradient */}
+          {/* Border — bracket çizgileriyle aynı stroke */}
           <div
             ref={borderRef}
             className="absolute pointer-events-none z-1"
@@ -689,16 +678,15 @@ export default function GradientGuru({
             }}
           />
 
-          {/* Top-left bracket ┘ (sits outside top-left corner) */}
+          {/* Top-left bracket — merkezde + oluşturur, açılınca sol üst köşe */}
           <div
             ref={bracketTLRef}
-            className="absolute pointer-events-none"
+            className="absolute pointer-events-none z-10"
             style={{
               width: BRACKET_LEN,
               height: BRACKET_LEN,
-              top: `calc(50% - ${BRACKET_LEN}px)`,
-              left: `calc(50% - ${BRACKET_LEN}px)`,
-              opacity: 0,
+              top: closedBrackets.tlTop,
+              left: closedBrackets.tlLeft,
             }}
           >
             {/* Bottom line */}
@@ -725,35 +713,34 @@ export default function GradientGuru({
             />
           </div>
 
-          {/* Bottom-right bracket ┌ (sits outside bottom-right corner) */}
+          {/* Bottom-right bracket — merkezde + oluşturur, açılınca sağ alt köşe */}
           <div
             ref={bracketBRRef}
-            className="absolute pointer-events-none"
+            className="absolute pointer-events-none z-10"
             style={{
               width: BRACKET_LEN,
               height: BRACKET_LEN,
-              top: "50%",
-              left: "50%",
-              opacity: 0,
+              top: closedBrackets.brTop,
+              left: closedBrackets.brLeft,
             }}
           >
-            {/* Top line */}
+            {/* Top line — merkez satırı paylaşır */}
             <div
               style={{
                 position: "absolute",
-                top: 0,
+                top: -BRACKET_THICK,
                 left: 0,
                 width: "100%",
                 height: BRACKET_THICK,
                 backgroundColor: INK,
               }}
             />
-            {/* Left line */}
+            {/* Left line — merkez sütunu paylaşır */}
             <div
               style={{
                 position: "absolute",
                 top: 0,
-                left: 0,
+                left: -BRACKET_THICK,
                 width: BRACKET_THICK,
                 height: "100%",
                 backgroundColor: INK,

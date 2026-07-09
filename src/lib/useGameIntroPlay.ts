@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { runIntroCardEnter, runIntroCardExit } from "@/lib/gameIntro";
 
@@ -18,7 +18,7 @@ export function useGameIntroPlay(options: {
     onDismissRef.current = options.onDismiss;
   });
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!options.active) {
       // eslint-disable-next-line react-hooks/set-state-in-effect -- kart kapanınca durumu sıfırla
       setPlayEnabled(false);
@@ -26,9 +26,13 @@ export function useGameIntroPlay(options: {
       return;
     }
 
+    const card = cardRef.current;
+    if (!card) return;
+
     setPlayEnabled(false);
     setPlayPressed(false);
-    const tl = runIntroCardEnter(cardRef.current, () => setPlayEnabled(true));
+    exitTlRef.current?.kill();
+    const tl = runIntroCardEnter(card, () => setPlayEnabled(true));
 
     return () => {
       tl.kill();

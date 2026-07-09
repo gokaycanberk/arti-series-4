@@ -63,6 +63,9 @@ const SNAP_START_DELAY = 0.6;
 const SNAP_DURATION = 2.4;
 const SNAP_STAGGER = 0.1;
 const REVEAL_HOLD = 0.4;
+/** Done tuşu — bırakma animasyonu + fade */
+const DONE_RELEASE_HOLD = 0.22;
+const DONE_EXIT_DURATION = 0.28;
 const SHRINK_DURATION = 0.9;
 const SHRINK_TARGET = 0.36;
 const VANISH_AT_SCALE = 0.42;
@@ -463,7 +466,6 @@ export default function BezierBrain({
   sequenceIndex = 0,
   attemptIndex,
   isPlaying,
-  shellReady,
   onAnswer,
   onGameStart,
   onIntroComplete,
@@ -481,13 +483,14 @@ export default function BezierBrain({
     return `${-pad} ${-pad} ${w + pad * 2} ${h + pad * 2}`;
   }, [character]);
 
-  const [phase, setPhase] = useState<Phase>("waiting");
+  const [phase, setPhase] = useState<Phase>("intro");
   const [points, setPoints] = useState<GamePoint[]>([]);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [pointsOpacity, setPointsOpacity] = useState(0);
   const [ghostOpacity, setGhostOpacity] = useState(0);
   const [flyScore, setFlyScore] = useState<number | null>(null);
   const [pathReady, setPathReady] = useState(false);
+  const [doneExiting, setDoneExiting] = useState(false);
 
   const pointsRef = useRef<GamePoint[]>([]);
   const dragIndexRef = useRef<number | null>(null);
@@ -499,6 +502,8 @@ export default function BezierBrain({
   const letterRef = useRef<SVGGElement>(null);
   const letterWrapRef = useRef<HTMLDivElement>(null);
   const scoreAnchorRef = useRef<HTMLDivElement>(null);
+  const doneWrapRef = useRef<HTMLDivElement>(null);
+  const doneExitTweenRef = useRef<gsap.core.Tween | null>(null);
   const finishTimelineRef = useRef<gsap.core.Timeline | null>(null);
   const totalLengthRef = useRef(0);
   const geometryRef = useRef<PathGeometry | null>(null);
@@ -540,33 +545,48 @@ export default function BezierBrain({
     playPressed: introPlayPressed,
     handlePlay: handleIntroPlay,
   } = useGameIntroPlay({
-    active: shellReady && phase === "intro",
+    active: phase === "intro",
     onDismiss: handleIntroDismiss,
   });
 
-  useLayoutEffect(() => {
-    const path = pathRef.current;
-    if (!path) return;
+  useEffect(() => {
+    let cancelled = false;
+    let frameId = 0;
 
-    const total = path.getTotalLength();
-    totalLengthRef.current = total;
+    const runGeometry = () => {
+      const path = pathRef.current;
+      if (!path || cancelled) return;
 
-    const geometry = buildGeometry(path, total, character);
-    geometryRef.current = geometry;
-    const { frac, contours } = geometry;
+      const total = path.getTotalLength();
+      totalLengthRef.current = total;
 
-    const base = buildGamePoints(path, total, character, geometry);
-    const scattered = buildRoundPoints(base, contours);
-    const synced = syncPointsPositions(path, total, scattered, frac);
+      const geometry = buildGeometry(path, total, character);
+      geometryRef.current = geometry;
+      const { frac, contours } = geometry;
 
-    pointsRef.current = synced;
-    setPoints(synced);
-    setPathReady(true);
+      const base = buildGamePoints(path, total, character, geometry);
+      const scattered = buildRoundPoints(base, contours);
+      const synced = syncPointsPositions(path, total, scattered, frac);
 
-    if (letterWrapRef.current) {
-      gsap.set(letterWrapRef.current, { scale: 1 });
-    }
-  }, [shellReady, gameKey, character]);
+      pointsRef.current = synced;
+      setPoints(synced);
+      setPathReady(true);
+
+      if (letterWrapRef.current) {
+        gsap.set(letterWrapRef.current, { scale: 1 });
+      }
+    };
+
+    // Intro animasyonunu bloklamamak için geometriyi bir sonraki kareye ertele
+    frameId = requestAnimationFrame(() => {
+      frameId = requestAnimationFrame(runGeometry);
+    });
+
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(frameId);
+    };
+  }, [gameKey, character]);
 
   const completeRound = useCallback(() => {
     const result = pendingResultRef.current;
@@ -712,8 +732,6 @@ export default function BezierBrain({
   }, [phase, character]);
 
   useEffect(() => {
-    if (!shellReady) return;
-
     let cancelled = false;
     const introAttempt = attemptIndex ?? sequenceIndex;
 
@@ -726,6 +744,11 @@ export default function BezierBrain({
       pendingResultRef.current = null;
       canDragRef.current = false;
       finishTimelineRef.current?.kill();
+      doneExitTweenRef.current?.kill();
+      setDoneExiting(false);
+      if (doneWrapRef.current) {
+        gsap.set(doneWrapRef.current, { opacity: 1, y: 0 });
+      }
       setFlyScore(null);
       setGhostOpacity(0);
       setPointsOpacity(0);
@@ -741,7 +764,7 @@ export default function BezierBrain({
     return () => {
       cancelled = true;
     };
-  }, [shellReady, gameKey, sequenceIndex, attemptIndex]);
+  }, [gameKey, sequenceIndex, attemptIndex]);
 
   useLayoutEffect(() => {
     if (phase !== "playing") return;
@@ -887,9 +910,32 @@ export default function BezierBrain({
     setDragIndex(null);
   }, []);
 
+  const dismissDoneButton = useCallback((onComplete: () => void) => {
+    const wrap = doneWrapRef.current;
+    if (!wrap) {
+      onComplete();
+      return;
+    }
+
+    doneExitTweenRef.current?.kill();
+    gsap.set(wrap, { opacity: 1, y: 0 });
+    doneExitTweenRef.current = gsap.to(wrap, {
+      opacity: 0,
+      y: 10,
+      duration: DONE_EXIT_DURATION,
+      ease: "power2.in",
+      onComplete,
+    });
+  }, []);
+
   const handleDone = useCallback(() => {
-    finishGame();
-  }, [finishGame]);
+    if (doneExiting || phase !== "playing" || endedRef.current) return;
+
+    setDoneExiting(true);
+    gsap.delayedCall(DONE_RELEASE_HOLD, () => {
+      dismissDoneButton(finishGame);
+    });
+  }, [doneExiting, dismissDoneButton, finishGame, phase]);
 
   const introActive = introPendingPhase(phase);
 
@@ -1049,12 +1095,13 @@ export default function BezierBrain({
           </div>
         </div>
 
-        {phase === "playing" && (
+        {(phase === "playing" || doneExiting) && (
           <div
+            ref={doneWrapRef}
             className="absolute left-1/2 z-20 -translate-x-1/2"
             style={{ bottom: "3%" }}
           >
-            <DoneKeycap onPress={handleDone} />
+            <DoneKeycap onPress={handleDone} disabled={doneExiting} />
           </div>
         )}
 

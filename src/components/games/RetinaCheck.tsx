@@ -47,6 +47,8 @@ type Side = "left" | "right";
 
 const BASE_SIZE = 132;
 const SIZE_DIFF = 2;
+/** Üçgen reveal — tepe hizası kıyas çizgisi */
+const REVEAL_GUIDE_COLOR = "rgb(0, 255, 255)";
 const REVEAL_MEET_DURATION = 1.15;
 const REVEAL_ZOOM_DURATION = 1.65;
 const SCORE_AFTER_REVEAL = 800;
@@ -62,8 +64,19 @@ const DESC_GAP = 36;
  * scaledW ile x hesaplamak sola kaydırır (scale zaten merkezden büyür).
  */
 const BOTTOM_CLIP_RATIO = 0.5;
+/** Üçgen reveal — skor panelinin altında kalsın */
+const TRIANGLE_BOTTOM_CLIP_RATIO = 0.64;
 const TARGET_WIDTH_RATIO = 1;
 const MEET_BOTTOM_RATIO = 0.92;
+const TRIANGLE_MEET_BOTTOM_RATIO = 0.98;
+
+function revealBottomClip(shape: RetinaVariation["shape"]) {
+  return shape === "triangle" ? TRIANGLE_BOTTOM_CLIP_RATIO : BOTTOM_CLIP_RATIO;
+}
+
+function revealMeetBottomRatio(shape: RetinaVariation["shape"]) {
+  return shape === "triangle" ? TRIANGLE_MEET_BOTTOM_RATIO : MEET_BOTTOM_RATIO;
+}
 
 function computeRevealLayout(
   bw: number,
@@ -71,6 +84,7 @@ function computeRevealLayout(
   totalW: number,
   maxH: number,
   meetOverlap = 0,
+  bottomClipRatio = BOTTOM_CLIP_RATIO,
 ) {
   const effectiveW = totalW - meetOverlap;
   const zoomScale = (bw * TARGET_WIDTH_RATIO) / effectiveW;
@@ -78,7 +92,7 @@ function computeRevealLayout(
   const visualCenterX = effectiveW / 2;
   const centerX = bw / 2 - visualCenterX;
   const originXPercent = meetOverlap > 0 ? (visualCenterX / totalW) * 100 : 50;
-  const finalY = bh + scaledH * BOTTOM_CLIP_RATIO - maxH;
+  const finalY = bh + scaledH * bottomClipRatio - maxH;
 
   return { zoomScale, centerX, finalY, scaledH, originXPercent, effectiveW };
 }
@@ -101,16 +115,14 @@ function readZoomMetrics(): ZoomBaseline {
   };
 }
 
-/** Oyun başlangıç zoom’una göre baseline al — yalnızca zoom denemesinde uyar */
+/** Oyun başlangıç zoom’una göre baseline al — zoom denemesinde uyar, geri alınınca kaldır */
 function usePageZoomPenalty(active: boolean) {
   const [isZoomed, setIsZoomed] = useState(false);
   const baselineRef = useRef<ZoomBaseline | null>(null);
-  const caughtRef = useRef(false);
 
   useEffect(() => {
     if (!active) {
       baselineRef.current = null;
-      caughtRef.current = false;
       // eslint-disable-next-line react-hooks/set-state-in-effect -- oyun dışıyken durumu sıfırla
       setIsZoomed(false);
       return;
@@ -120,15 +132,7 @@ function usePageZoomPenalty(active: boolean) {
       baselineRef.current = readZoomMetrics();
     };
 
-    const flagCheat = () => {
-      if (caughtRef.current) return;
-      caughtRef.current = true;
-      setIsZoomed(true);
-    };
-
     const evaluate = () => {
-      if (caughtRef.current) return;
-
       if (!baselineRef.current) {
         captureBaseline();
         return;
@@ -141,11 +145,17 @@ function usePageZoomPenalty(active: boolean) {
         Math.abs(cur.dpr - base.dpr) > 0.04 ||
         Math.abs(cur.widthRatio - base.widthRatio) > 0.06;
 
-      if (changed) flagCheat();
+      setIsZoomed(changed);
+    };
+
+    const evaluateSoon = () => {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(evaluate);
+      });
     };
 
     const onWheel = (e: WheelEvent) => {
-      if (e.ctrlKey || e.metaKey) flagCheat();
+      if (e.ctrlKey || e.metaKey) evaluateSoon();
     };
 
     const onKeyDown = (e: KeyboardEvent) => {
@@ -157,17 +167,19 @@ function usePageZoomPenalty(active: boolean) {
         e.key === "0" ||
         e.key === "_"
       ) {
-        flagCheat();
+        evaluateSoon();
       }
     };
 
-    const onGesture = () => flagCheat();
+    const onGesture = () => evaluateSoon();
 
-    caughtRef.current = false;
     setIsZoomed(false);
     captureBaseline();
 
-    const settleId = window.setTimeout(captureBaseline, 120);
+    const settleId = window.setTimeout(() => {
+      captureBaseline();
+      evaluate();
+    }, 120);
 
     const vv = window.visualViewport;
     vv?.addEventListener("resize", evaluate);
@@ -206,7 +218,7 @@ export default function RetinaCheck({
   attemptIndex,
   timeLeft,
 }: RetinaCheckProps) {
-  const [phase, setPhase] = useState<Phase>("waiting");
+  const [phase, setPhase] = useState<Phase>("intro");
   const [biggerSide, setBiggerSide] = useState<Side>("left");
   const [variation, setVariation] = useState<RetinaVariation>(() =>
     pickRetinaVariation(
@@ -219,6 +231,8 @@ export default function RetinaCheck({
   const pairRef = useRef<HTMLDivElement>(null);
   const leftShapeRef = useRef<HTMLButtonElement>(null);
   const rightShapeRef = useRef<HTMLButtonElement>(null);
+  const leftGuideRef = useRef<HTMLSpanElement>(null);
+  const rightGuideRef = useRef<HTMLSpanElement>(null);
   const descBoxRef = useRef<HTMLDivElement>(null);
   const scoreAnchorRef = useRef<HTMLDivElement>(null);
   const pickedRef = useRef(false);
@@ -244,13 +258,16 @@ export default function RetinaCheck({
     playPressed: introPlayPressed,
     handlePlay: handleIntroPlay,
   } = useGameIntroPlay({
-    active: shellReady && phase === "intro",
+    active: phase === "intro",
     onDismiss: handleIntroDismiss,
   });
 
   const shapeLabel = getRetinaShapeLabel(variation.shape);
   const isZoomed = usePageZoomPenalty(phase === "playing");
   const gsapControlsSize = phase === "reveal" || phase === "scored";
+  const showTriangleGuides =
+    variation.shape === "triangle" &&
+    (phase === "reveal" || phase === "scored");
 
   const leftSize = biggerSide === "left" ? BASE_SIZE + SIZE_DIFF : BASE_SIZE;
   const rightSize = biggerSide === "right" ? BASE_SIZE + SIZE_DIFF : BASE_SIZE;
@@ -334,6 +351,8 @@ export default function RetinaCheck({
       const pair = pairRef.current;
       const left = leftShapeRef.current;
       const right = rightShapeRef.current;
+      const leftGuide = leftGuideRef.current;
+      const rightGuide = rightGuideRef.current;
       if (!board || !pair || !left || !right) return;
 
       const bw = board.clientWidth;
@@ -345,21 +364,59 @@ export default function RetinaCheck({
 
       const meetOverlap = getRevealMeetOverlap(variation.shape, leftW, rightW);
       const rightMeetX = leftW - meetOverlap;
-      const useDimensionZoom = variation.shape !== "square";
+      const bottomClip = revealBottomClip(variation.shape);
+      const meetBottomRatio = revealMeetBottomRatio(variation.shape);
 
-      const { zoomScale, centerX, finalY, scaledH, effectiveW } =
-        computeRevealLayout(bw, bh, totalW, maxH, meetOverlap);
+      const { zoomScale, centerX, scaledH, effectiveW } = computeRevealLayout(
+        bw,
+        bh,
+        totalW,
+        maxH,
+        meetOverlap,
+        bottomClip,
+      );
+
+      const scaledLeftW = Math.round(leftW * zoomScale);
+      const scaledRightW = Math.round(rightW * zoomScale);
+      const scaledRightX = Math.round(rightMeetX * zoomScale);
+      const scaledLeftY = Math.round((maxH - leftW) * zoomScale);
+      const scaledRightY = Math.round((maxH - rightW) * zoomScale);
+      const scaledMaxH = Math.max(scaledLeftW, scaledRightW);
+      const guideWidthMeet = Math.round(effectiveW);
+      const guideWidthZoom = Math.round(effectiveW * zoomScale);
+      const finalDimY = Math.round(
+        bh + scaledH * bottomClip - scaledMaxH,
+      );
+      const finalPairX = Math.round(bw / 2 - (effectiveW * zoomScale) / 2);
 
       const meetX = centerX;
-      const meetY = bh * MEET_BOTTOM_RATIO - maxH;
+      const meetY = bh * meetBottomRatio - maxH;
       const leftMeetY = maxH - leftW;
       const rightMeetY = maxH - rightW;
-      const finalDimY = bh + scaledH * BOTTOM_CLIP_RATIO - maxH * zoomScale;
-      const finalPairX = bw / 2 - (effectiveW * zoomScale) / 2;
 
-      gsap.killTweensOf([left, right, pair]);
+      const dimSnap = { width: 1, height: 1, x: 1, y: 1 };
+
+      gsap.killTweensOf(
+        [left, right, pair, leftGuide, rightGuide].filter(Boolean),
+      );
       gsap.set(pair, { transformOrigin: "50% 100%", scale: 1 });
       gsap.set([left, right], { transformOrigin: "50% 100%" });
+      if (leftGuide) {
+        gsap.set(leftGuide, {
+          opacity: 0,
+          left: 0,
+          top: leftMeetY,
+          width: guideWidthMeet,
+        });
+      }
+      if (rightGuide) {
+        gsap.set(rightGuide, {
+          opacity: 0,
+          left: 0,
+          top: rightMeetY,
+          width: guideWidthMeet,
+        });
+      }
 
       const tl = gsap.timeline({ onComplete: onDone });
 
@@ -371,6 +428,7 @@ export default function RetinaCheck({
           y: leftMeetY,
           duration: REVEAL_MEET_DURATION,
           ease: "power3.inOut",
+          snap: dimSnap,
         },
         0,
       );
@@ -382,6 +440,7 @@ export default function RetinaCheck({
           y: rightMeetY,
           duration: REVEAL_MEET_DURATION,
           ease: "power3.inOut",
+          snap: dimSnap,
         },
         0,
       );
@@ -393,55 +452,99 @@ export default function RetinaCheck({
           y: meetY,
           duration: REVEAL_MEET_DURATION,
           ease: "power3.inOut",
+          snap: dimSnap,
         },
         0,
       );
 
-      // 2) Yan yana geldikten sonra büyüt
-      if (useDimensionZoom) {
-        // Daire/üçgen: CSS scale bitmap'i büyütür → pikselleşme. Gerçek boyut animasyonu.
+      // 2) CSS scale bitmap'i büyütür → pikselleşme; gerçek boyut animasyonu
+      tl.to(
+        left,
+        {
+          width: scaledLeftW,
+          height: scaledLeftW,
+          y: scaledLeftY,
+          duration: REVEAL_ZOOM_DURATION,
+          ease: "power2.inOut",
+          snap: dimSnap,
+        },
+        REVEAL_MEET_DURATION,
+      );
+      tl.to(
+        right,
+        {
+          width: scaledRightW,
+          height: scaledRightW,
+          x: scaledRightX,
+          y: scaledRightY,
+          duration: REVEAL_ZOOM_DURATION,
+          ease: "power2.inOut",
+          snap: dimSnap,
+        },
+        REVEAL_MEET_DURATION,
+      );
+      tl.to(
+        pair,
+        {
+          x: finalPairX,
+          y: finalDimY,
+          duration: REVEAL_ZOOM_DURATION,
+          ease: "power2.inOut",
+          snap: dimSnap,
+        },
+        REVEAL_MEET_DURATION,
+      );
+
+      if (variation.shape === "triangle" && leftGuide && rightGuide) {
         tl.to(
-          left,
+          leftGuide,
           {
-            width: leftW * zoomScale,
-            height: leftW * zoomScale,
-            y: leftMeetY * zoomScale,
+            left: 0,
+            top: leftMeetY,
+            width: guideWidthMeet,
+            opacity: 0,
+            duration: REVEAL_MEET_DURATION,
+            ease: "power3.inOut",
+            snap: dimSnap,
+          },
+          0,
+        );
+        tl.to(
+          rightGuide,
+          {
+            left: 0,
+            top: rightMeetY,
+            width: guideWidthMeet,
+            opacity: 0,
+            duration: REVEAL_MEET_DURATION,
+            ease: "power3.inOut",
+            snap: dimSnap,
+          },
+          0,
+        );
+        tl.to(
+          leftGuide,
+          {
+            left: 0,
+            top: scaledLeftY,
+            width: guideWidthZoom,
+            opacity: 1,
             duration: REVEAL_ZOOM_DURATION,
             ease: "power2.inOut",
+            snap: dimSnap,
           },
           REVEAL_MEET_DURATION,
         );
         tl.to(
-          right,
+          rightGuide,
           {
-            width: rightW * zoomScale,
-            height: rightW * zoomScale,
-            x: rightMeetX * zoomScale,
-            y: rightMeetY * zoomScale,
+            left: 0,
+            top: scaledRightY,
+            width: guideWidthZoom,
+            opacity: 1,
             duration: REVEAL_ZOOM_DURATION,
             ease: "power2.inOut",
-          },
-          REVEAL_MEET_DURATION,
-        );
-        tl.to(
-          pair,
-          {
-            x: finalPairX,
-            y: finalDimY,
-            duration: REVEAL_ZOOM_DURATION,
-            ease: "power2.inOut",
-          },
-          REVEAL_MEET_DURATION,
-        );
-      } else {
-        tl.to(
-          pair,
-          {
-            scale: zoomScale,
-            y: finalY,
-            transformOrigin: "50% 100%",
-            duration: REVEAL_ZOOM_DURATION,
-            ease: "power2.inOut",
+            snap: dimSnap,
           },
           REVEAL_MEET_DURATION,
         );
@@ -624,7 +727,12 @@ export default function RetinaCheck({
               disabled={phase !== "playing" || isZoomed}
               onClick={() => handlePick("left")}
               className="absolute left-0 top-0 cursor-pointer outline-none disabled:cursor-default"
-              style={leftShapeStyle}
+              style={{
+                ...leftShapeStyle,
+                ...(gsapControlsSize
+                  ? { willChange: "width, height, transform" as const }
+                  : null),
+              }}
               aria-label={`Sol ${shapeLabel} — 2 piksel daha büyük olanı seç`}
             />
             <button
@@ -633,9 +741,38 @@ export default function RetinaCheck({
               disabled={phase !== "playing" || isZoomed}
               onClick={() => handlePick("right")}
               className="absolute left-0 top-0 cursor-pointer outline-none disabled:cursor-default"
-              style={rightShapeStyle}
+              style={{
+                ...rightShapeStyle,
+                ...(gsapControlsSize
+                  ? { willChange: "width, height, transform" as const }
+                  : null),
+              }}
               aria-label={`Sağ ${shapeLabel} — 2 piksel daha büyük olanı seç`}
             />
+            {showTriangleGuides && (
+              <>
+                <span
+                  ref={leftGuideRef}
+                  aria-hidden
+                  className="pointer-events-none absolute z-10"
+                  style={{
+                    height: 1,
+                    backgroundColor: REVEAL_GUIDE_COLOR,
+                    opacity: 0,
+                  }}
+                />
+                <span
+                  ref={rightGuideRef}
+                  aria-hidden
+                  className="pointer-events-none absolute z-10"
+                  style={{
+                    height: 1,
+                    backgroundColor: REVEAL_GUIDE_COLOR,
+                    opacity: 0,
+                  }}
+                />
+              </>
+            )}
           </div>
         )}
       </div>
@@ -652,7 +789,7 @@ export default function RetinaCheck({
               letterSpacing: "-0.03em",
             }}
           >
-            THAT&apos;S CHEATING!!1!
+            NO ZOOM, NO CHEAT!!1!
           </p>
         </div>
       )}

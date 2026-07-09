@@ -88,7 +88,7 @@ export default function OpticalPanic({
   round,
   timeLeft,
 }: OpticalPanicProps) {
-  const [phase, setPhase] = useState<Phase>("waiting");
+  const [phase, setPhase] = useState<Phase>("intro");
   const [currentWord, setCurrentWord] = useState<OpticalPanicRound>(() =>
     pickOpticalPanicRound(
       sequenceIndex !== undefined ? { sequenceIndex } : undefined,
@@ -150,7 +150,7 @@ export default function OpticalPanic({
     playPressed: introPlayPressed,
     handlePlay: handleIntroPlay,
   } = useGameIntroPlay({
-    active: shellReady && phase === "intro",
+    active: phase === "intro",
     onDismiss: handleIntroDismiss,
   });
 

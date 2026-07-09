@@ -5,8 +5,12 @@ export const INTRO_CARD_WIDTH = 1100;
 export const INTRO_CARD_HEIGHT = 500;
 
 export const INTRO_HOLD = 2;
-export const INTRO_ENTER_DURATION = 1.1;
-export const INTRO_EXIT_DURATION = 1.0;
+/** Aşağıdan yukarı giriş — bekleme yok, yavaş ve yumuşak */
+export const INTRO_ENTER_DURATION = 2.25;
+/** PLAY sonrası aşağı çıkış */
+export const INTRO_EXIT_DURATION = 2.0;
+export const INTRO_ENTER_EASE = "power2.inOut";
+export const INTRO_EXIT_EASE = "power2.inOut";
 export const INTRO_PLAY_BUTTON_W = 132;
 export const INTRO_PLAY_BUTTON_H = 56;
 /** PressButton 3D gölge payı (DY + OY×2) */
@@ -119,16 +123,15 @@ export function runIntroCardEnter(
     return gsap.timeline();
   }
 
-  return gsap.timeline({ onComplete: onEntered }).fromTo(
-    card,
-    { y: "100vh", opacity: 0 },
-    {
-      y: 0,
-      opacity: 1,
-      duration: INTRO_ENTER_DURATION,
-      ease: "power3.out",
-    },
-  );
+  gsap.killTweensOf(card);
+  gsap.set(card, { y: "100vh", opacity: 0 });
+
+  return gsap.timeline({ onComplete: onEntered }).to(card, {
+    y: 0,
+    opacity: 1,
+    duration: INTRO_ENTER_DURATION,
+    ease: INTRO_ENTER_EASE,
+  });
 }
 
 /** PLAY! sonrası intro kartı aşağı kayarak çıkar */
@@ -141,11 +144,13 @@ export function runIntroCardExit(
     return gsap.timeline();
   }
 
+  gsap.killTweensOf(card);
+
   return gsap.timeline({ onComplete }).to(card, {
     y: "100vh",
     opacity: 0,
     duration: INTRO_EXIT_DURATION,
-    ease: "power2.in",
+    ease: INTRO_EXIT_EASE,
   });
 }
 

@@ -59,6 +59,9 @@ const BRACKET_THICK = 1;
 const BRACKET_REST_OFFSET = BRACKET_LEN - BRACKET_THICK;
 const DOT_DROP_START = -160;
 const DOT_DROP_DURATION = 2.4;
+/** Done tuşu — bırakma animasyonu + fade */
+const DONE_RELEASE_HOLD = 0.22;
+const DONE_EXIT_DURATION = 0.28;
 
 /** Guru skor stack görsel merkez düzeltmesi (katmanlar alta doğru) */
 const GURU_SCORE_STACK_LAYERS = 7;
@@ -147,7 +150,7 @@ export default function GradientGuru({
   );
 
   /* ── State ── */
-  const [phase, setPhase] = useState<Phase>("idle");
+  const [phase, setPhase] = useState<Phase>("intro");
   const boxSize = useBoxSize();
   const [guesses, setGuesses] = useState<Point[]>([
     { x: 0.35, y: 0.35 },
@@ -156,6 +159,7 @@ export default function GradientGuru({
   const [showReveal, setShowReveal] = useState(false);
   const [flyScore, setFlyScore] = useState<number | null>(null);
   const [scoreOrigin, setScoreOrigin] = useState<Point | null>(null);
+  const [doneExiting, setDoneExiting] = useState(false);
 
   /* ── Refs ── */
   const containerRef = useRef<HTMLDivElement>(null);
@@ -168,6 +172,8 @@ export default function GradientGuru({
   const bracketBRRef = useRef<HTMLDivElement>(null);
   const dot0Ref = useRef<HTMLDivElement>(null);
   const dot1Ref = useRef<HTMLDivElement>(null);
+  const doneWrapRef = useRef<HTMLDivElement>(null);
+  const doneExitTweenRef = useRef<gsap.core.Tween | null>(null);
   const revealSvgRef = useRef<SVGSVGElement>(null);
   const dragIdx = useRef<number | null>(null);
   const tlRef = useRef<gsap.core.Timeline | null>(null);
@@ -195,7 +201,7 @@ export default function GradientGuru({
     playPressed: introPlayPressed,
     handlePlay: handleIntroPlay,
   } = useGameIntroPlay({
-    active: shellReady && phase === "intro",
+    active: phase === "intro",
     onDismiss: handleIntroDismiss,
   });
 
@@ -214,6 +220,11 @@ export default function GradientGuru({
       setShowReveal(false);
       setFlyScore(null);
       setScoreOrigin(null);
+      doneExitTweenRef.current?.kill();
+      setDoneExiting(false);
+      if (doneWrapRef.current) {
+        gsap.set(doneWrapRef.current, { opacity: 1, y: 0 });
+      }
       const introAttempt = attemptIndex ?? sequenceIndex;
       if (shouldSkipIntroCard(introAttempt)) {
         onIntroCompleteRef.current();
@@ -487,9 +498,32 @@ export default function GradientGuru({
     [guesses, phase, currentRound, boxSize],
   );
 
+  const dismissDoneButton = useCallback((onComplete: () => void) => {
+    const wrap = doneWrapRef.current;
+    if (!wrap) {
+      onComplete();
+      return;
+    }
+
+    doneExitTweenRef.current?.kill();
+    gsap.set(wrap, { opacity: 1, y: 0 });
+    doneExitTweenRef.current = gsap.to(wrap, {
+      opacity: 0,
+      y: 10,
+      duration: DONE_EXIT_DURATION,
+      ease: "power2.in",
+      onComplete,
+    });
+  }, []);
+
   const handleDone = useCallback(() => {
-    finishRound();
-  }, [finishRound]);
+    if (doneExiting || phase !== "playing" || roundFinishedRef.current) return;
+
+    setDoneExiting(true);
+    gsap.delayedCall(DONE_RELEASE_HOLD, () => {
+      dismissDoneButton(finishRound);
+    });
+  }, [doneExiting, dismissDoneButton, finishRound, phase]);
 
   useEffect(() => {
     if (phase !== "playing" || !isPlaying || timeLeft > 0) return;
@@ -551,7 +585,7 @@ export default function GradientGuru({
 
   const showDots =
     phase === "setup" || phase === "playing" || phase === "revealing";
-  const showDone = phase === "playing";
+  const showDone = phase === "playing" || doneExiting;
 
   const gameUiVisible =
     !introPendingPhase(phase) &&
@@ -775,7 +809,11 @@ export default function GradientGuru({
         </div>
 
         <div className="flex min-h-0 flex-1 items-center justify-center">
-          {showDone && <DoneKeycap onPress={handleDone} />}
+          {showDone && (
+            <div ref={doneWrapRef}>
+              <DoneKeycap onPress={handleDone} disabled={doneExiting} />
+            </div>
+          )}
         </div>
       </div>
 

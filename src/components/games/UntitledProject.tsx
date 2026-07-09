@@ -255,7 +255,7 @@ export default function UntitledProject({
     playPressed: introPlayPressed,
     handlePlay: handleIntroPlay,
   } = useGameIntroPlay({
-    active: shellReady && phase === "intro",
+    active: phase === "intro",
     onDismiss: handleIntroDismiss,
   });
 

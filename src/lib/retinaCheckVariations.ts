@@ -57,7 +57,8 @@ export const RETINA_TRIANGLE_CLIP = "polygon(50% 0%, 100% 100%, 0% 100%)";
 export const RETINA_REVEAL_OVERLAP_RATIO: Record<RetinaShape, number> = {
   square: 0,
   circle: 0.52,
-  triangle: 0.46,
+  /** Üçgen — tepe yüksekliği kıyası için daha fazla bindirme */
+  triangle: 0.68,
 };
 
 export function getRevealMeetOverlap(

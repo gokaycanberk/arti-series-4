@@ -203,12 +203,8 @@ export function GameShell({
       );
     }
 
-    tl.fromTo(
-      "#gs-game-area",
-      { y: 40, opacity: 0 },
-      { y: 0, opacity: 1, duration: 0.7 },
-      0.6,
-    );
+    // Oyun alanı — intro kartı parent animasyonundan etkilenmesin
+    gsap.set("#gs-game-area", { y: 0, opacity: 1 });
   }, []);
 
   const formatTime = (seconds: number) => {
@@ -269,7 +265,6 @@ export function GameShell({
       <div
         id="gs-game-area"
         className="relative min-h-0 flex-1"
-        style={{ opacity: 0 }}
       >
         {description && !introActive ? (
           <div

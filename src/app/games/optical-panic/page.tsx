@@ -31,6 +31,7 @@ export default function OpticalPanicPage() {
           onAnswer,
           addRoundScore,
           startGame,
+          endGame,
           onIntroComplete,
           round,
           timeLeft,
@@ -45,6 +46,7 @@ export default function OpticalPanicPage() {
             onIntroComplete={onIntroComplete}
             addRoundScore={addRoundScore}
             onGameComplete={() => setWordRound((prev) => prev + 1)}
+            endGame={endGame}
             round={round}
             timeLeft={timeLeft}
           />

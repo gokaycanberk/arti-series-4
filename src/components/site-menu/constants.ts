@@ -42,9 +42,9 @@ export const WHY_BOX_W = 991;
 export const WHY_BOX_H = 433;
 export const WHY_BRACKET_SIZE = 67;
 /** + görünür kalma süresi (sn) */
-export const WHY_PLUS_HOLD = 3;
-/** Açılış ve kapanış aynı hız — kapanış referans */
-export const WHY_PANEL_DURATION = 2.04;
+export const WHY_PLUS_HOLD = 0.6;
+/** Açılış ve kapanış aynı hız */
+export const WHY_PANEL_DURATION = 1.1;
 export const WHY_TEXT =
   "Gorem ipsum dolor sit amet, consectetur adipiscing elit. Etiam eu turpis molestie, dictum est a, mattis tellus. Sed dignissim, metus nec fringilla accumsan, risus sem sollicitudin lacus, ut interdum t Aliquam in elementum tellus.\n\nCurabitur tempor quis eros tempus lacinia. Nam bibendum pellentesque quam a convallis. Sed ut vulputate nisi. Integer in felis sed leo vestibulum venenatis. Suspendisse quis arcu sem. Gorem ipsum dolor sit amet, consectetur adipiscing elit. Etiam eu turpis molestie, dictum est a, mattis tellus. Sed dignissim,";
 

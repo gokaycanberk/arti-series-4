@@ -249,7 +249,7 @@ export default function OnboardingPage() {
               round={round}
               timeLeft={timeLeft}
               {...(activeGame.resetKey === "optical-panic"
-                ? { sequenceIndex: attemptIndex, attemptIndex }
+                ? { sequenceIndex: attemptIndex, attemptIndex, endGame }
                 : {})}
               {...(activeGame.resetKey === "retina-check"
                 ? { sequenceIndex: attemptIndex, attemptIndex }

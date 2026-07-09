@@ -21,6 +21,7 @@ import {
   shouldSkipIntroCard,
 } from "@/lib/gameIntro";
 import { useGameIntroPlay } from "@/lib/useGameIntroPlay";
+import { useSiteMenuOptional } from "@/components/site-menu";
 import {
   pickOpticalPanicRound,
   type OpticalPanicRound,
@@ -35,6 +36,8 @@ interface OpticalPanicProps {
   onIntroComplete: () => void;
   addRoundScore: (points: number) => void;
   onGameComplete?: () => void;
+  /** Harf yere oturduğunda süreyi durdurmak için */
+  endGame?: () => void;
   /** Maraton / test: 0=MIND, 1=HEART, 2=FLAIR */
   sequenceIndex?: number;
   attemptIndex?: number;
@@ -79,6 +82,7 @@ export default function OpticalPanic({
   onIntroComplete,
   addRoundScore,
   onGameComplete,
+  endGame,
   sequenceIndex,
   attemptIndex,
   round,
@@ -103,6 +107,7 @@ export default function OpticalPanic({
   const controlsRef = useRef<HTMLDivElement>(null);
   const leftKeyRef = useRef<ArrowKeycapHandle>(null);
   const rightKeyRef = useRef<ArrowKeycapHandle>(null);
+  const downKeyRef = useRef<ArrowKeycapHandle>(null);
   const noteRef = useRef<HTMLDivElement>(null);
   const wordAreaRef = useRef<HTMLDivElement>(null);
   const wordTextRef = useRef<HTMLDivElement>(null);
@@ -114,14 +119,25 @@ export default function OpticalPanic({
   const fallingWordWrapRef = useRef<HTMLDivElement>(null);
   const handleLandRef = useRef<() => void>(() => {});
   const landedRef = useRef(false);
+  const speedBoostTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isMenuPausedRef = useRef(false);
+  const menu = useSiteMenuOptional();
+  const isMenuPaused = menu?.isOpen ?? false;
   const onGameStartRef = useRef(onGameStart);
   const onIntroCompleteRef = useRef(onIntroComplete);
+  const endGameRef = useRef(endGame);
   useEffect(() => {
     onGameStartRef.current = onGameStart;
   });
   useEffect(() => {
     onIntroCompleteRef.current = onIntroComplete;
   });
+  useEffect(() => {
+    endGameRef.current = endGame;
+  });
+  useEffect(() => {
+    isMenuPausedRef.current = isMenuPaused;
+  }, [isMenuPaused]);
 
   const handleIntroDismiss = useCallback(() => {
     onIntroCompleteRef.current();
@@ -140,6 +156,9 @@ export default function OpticalPanic({
 
   const FALL_DURATION = 13;
   const STEP_SIZE = 2;
+  /** Aşağı ok — kısa süreli hız artışı, sonra normale döner */
+  const SPEED_BOOST = 2;
+  const BOOST_DURATION_MS = 500;
   const RED_REVEAL_DELAY = 3000;
   const SCORE_REVEAL_DELAY = 200;
   const NOTE_AFTER_SCORE_DELAY = 400;
@@ -267,6 +286,10 @@ export default function OpticalPanic({
     setLanded(false);
     landedRef.current = false;
     setFlyScore(null);
+    if (speedBoostTimerRef.current) {
+      clearTimeout(speedBoostTimerRef.current);
+      speedBoostTimerRef.current = null;
+    }
   }, [getFallStartY, sequenceIndex]);
 
   useEffect(() => {
@@ -275,6 +298,14 @@ export default function OpticalPanic({
       landedRef.current = true;
       setLanded(true);
       setPhase("landed");
+
+      // Harf oturdu — süreyi durdur
+      endGameRef.current?.();
+
+      if (speedBoostTimerRef.current) {
+        clearTimeout(speedBoostTimerRef.current);
+        speedBoostTimerRef.current = null;
+      }
 
       animRef.current?.kill();
       if (fallingRef.current) {
@@ -406,6 +437,9 @@ export default function OpticalPanic({
           handleLandRef.current();
         },
       });
+      if (isMenuPausedRef.current) {
+        animRef.current.pause();
+      }
     };
 
     frameId = requestAnimationFrame(() => {
@@ -414,9 +448,31 @@ export default function OpticalPanic({
 
     return () => {
       cancelAnimationFrame(frameId);
+      if (speedBoostTimerRef.current) {
+        clearTimeout(speedBoostTimerRef.current);
+        speedBoostTimerRef.current = null;
+      }
       animRef.current?.kill();
     };
   }, [phase, isPlaying, landed, round, getFallStartY, alignBaseline]);
+
+  // Menü açıkken düşme animasyonunu duraklat
+  useEffect(() => {
+    if (phase !== "playing" || landed) return;
+    const tween = animRef.current;
+    if (!tween) return;
+
+    if (isMenuPaused) {
+      tween.pause();
+      if (speedBoostTimerRef.current) {
+        clearTimeout(speedBoostTimerRef.current);
+        speedBoostTimerRef.current = null;
+      }
+      tween.timeScale(1);
+    } else if (isPlaying) {
+      tween.resume();
+    }
+  }, [isMenuPaused, isPlaying, phase, landed]);
 
   // Süre bitince harfi anında aşağı indir
   useEffect(() => {
@@ -429,19 +485,40 @@ export default function OpticalPanic({
   }, [isPlaying, phase, timeLeft]);
 
   const moveLeft = useCallback(() => {
-    if (landed || phase !== "playing" || !fallingRef.current) return;
+    if (landed || phase !== "playing" || isMenuPaused || !fallingRef.current) return;
     fallingXRef.current -= STEP_SIZE;
     gsap.set(fallingRef.current, { x: fallingXRef.current });
-  }, [landed, phase]);
+  }, [landed, phase, isMenuPaused]);
 
   const moveRight = useCallback(() => {
-    if (landed || phase !== "playing" || !fallingRef.current) return;
+    if (landed || phase !== "playing" || isMenuPaused || !fallingRef.current) return;
     fallingXRef.current += STEP_SIZE;
     gsap.set(fallingRef.current, { x: fallingXRef.current });
-  }, [landed, phase]);
+  }, [landed, phase, isMenuPaused]);
+
+  // Aşağı ok — kısa süreli hız artışı, sonra normale döner
+  const speedUp = useCallback(() => {
+    if (landed || phase !== "playing" || isMenuPaused) return;
+    const tween = animRef.current;
+    if (!tween) return;
+
+    tween.timeScale(SPEED_BOOST);
+
+    if (speedBoostTimerRef.current) {
+      clearTimeout(speedBoostTimerRef.current);
+    }
+
+    speedBoostTimerRef.current = setTimeout(() => {
+      speedBoostTimerRef.current = null;
+      if (!landedRef.current && animRef.current) {
+        animRef.current.timeScale(1);
+      }
+    }, BOOST_DURATION_MS);
+  }, [landed, phase, isMenuPaused]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (isMenuPaused) return;
       if (e.key === "ArrowLeft") {
         e.preventDefault();
         leftKeyRef.current?.press();
@@ -450,6 +527,11 @@ export default function OpticalPanic({
         e.preventDefault();
         rightKeyRef.current?.press();
         moveRight();
+      } else if (e.key === "ArrowDown") {
+        e.preventDefault();
+        if (e.repeat) return;
+        downKeyRef.current?.press();
+        speedUp();
       }
     };
 
@@ -460,6 +542,9 @@ export default function OpticalPanic({
       } else if (e.key === "ArrowRight") {
         e.preventDefault();
         rightKeyRef.current?.release();
+      } else if (e.key === "ArrowDown") {
+        e.preventDefault();
+        downKeyRef.current?.release();
       }
     };
 
@@ -469,7 +554,7 @@ export default function OpticalPanic({
       window.removeEventListener("keydown", handleKeyDown);
       window.removeEventListener("keyup", handleKeyUp);
     };
-  }, [moveLeft, moveRight]);
+  }, [moveLeft, moveRight, speedUp, isMenuPaused]);
 
   const handleScoreFlyComplete = useCallback(
     (points: number) => {
@@ -575,28 +660,43 @@ export default function OpticalPanic({
           ref={controlsRef}
           style={{
             display: "flex",
+            flexDirection: "column",
             width: "100%",
             gap: ARROW_KEYCAP_GAP,
           }}
         >
-          <ArrowKeycap
-            ref={leftKeyRef}
-            direction="left"
-            onPress={moveLeft}
-            ariaLabel="Move left"
-            keyWidth={ARROW_KEYCAP_BODY_W}
-            keyHeight={ARROW_KEYCAP_BODY_H}
-            edgeAlign="start"
-          />
-          <ArrowKeycap
-            ref={rightKeyRef}
-            direction="right"
-            onPress={moveRight}
-            ariaLabel="Move right"
-            keyWidth={ARROW_KEYCAP_BODY_W}
-            keyHeight={ARROW_KEYCAP_BODY_H}
-            edgeAlign="end"
-          />
+          <div style={{ display: "flex", width: "100%", gap: ARROW_KEYCAP_GAP }}>
+            <ArrowKeycap
+              ref={leftKeyRef}
+              direction="left"
+              onPress={moveLeft}
+              ariaLabel="Move left"
+              keyWidth={ARROW_KEYCAP_BODY_W}
+              keyHeight={ARROW_KEYCAP_BODY_H}
+              edgeAlign="start"
+            />
+            <ArrowKeycap
+              ref={rightKeyRef}
+              direction="right"
+              onPress={moveRight}
+              ariaLabel="Move right"
+              keyWidth={ARROW_KEYCAP_BODY_W}
+              keyHeight={ARROW_KEYCAP_BODY_H}
+              edgeAlign="end"
+            />
+          </div>
+
+          {/* Aşağı ok — iki tuşun ortasında, düşmeyi hızlandırır */}
+          <div style={{ display: "flex", width: "100%", justifyContent: "center" }}>
+            <ArrowKeycap
+              ref={downKeyRef}
+              direction="down"
+              onPress={speedUp}
+              ariaLabel="Speed up"
+              keyWidth={ARROW_KEYCAP_BODY_W}
+              keyHeight={ARROW_KEYCAP_BODY_H}
+            />
+          </div>
         </div>
 
         {/* Uyarı kutusu — ok tuşlarının hemen altında */}

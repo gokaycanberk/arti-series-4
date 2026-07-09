@@ -16,7 +16,7 @@ export interface ArrowKeycapHandle {
 }
 
 interface ArrowKeycapProps {
-  direction: "left" | "right";
+  direction: "left" | "right" | "down";
   onPress?: () => void;
   className?: string;
   style?: CSSProperties;
@@ -120,10 +120,16 @@ const ArrowKeycap = forwardRef<ArrowKeycapHandle, ArrowKeycapProps>(
           setLine(idShaft, cx + aw / 2, cy, cx - aw / 2, cy);
           setLine(idHeadT, cx - aw / 2, cy, cx - aw / 2 + ah, cy - ah);
           setLine(idHeadB, cx - aw / 2, cy, cx - aw / 2 + ah, cy + ah);
-        } else {
+        } else if (direction === "right") {
           setLine(idShaft, cx - aw / 2, cy, cx + aw / 2, cy);
           setLine(idHeadT, cx + aw / 2, cy, cx + aw / 2 - ah, cy - ah);
           setLine(idHeadB, cx + aw / 2, cy, cx + aw / 2 - ah, cy + ah);
+        } else {
+          // down — dikey mil, aşağı bakan uç
+          const av = Math.round(H * 0.25);
+          setLine(idShaft, cx, cy - av, cx, cy + av);
+          setLine(idHeadT, cx, cy + av, cx - ah, cy + av - ah);
+          setLine(idHeadB, cx, cy + av, cx + ah, cy + av - ah);
         }
 
         svg.querySelectorAll(`#glyph-${uid} line`).forEach((line) => {
@@ -197,7 +203,14 @@ const ArrowKeycap = forwardRef<ArrowKeycapHandle, ArrowKeycapProps>(
         viewBox={`${viewBoxX} 0 ${svgW} ${svgH}`}
         style={{ cursor: "pointer", overflow: "visible", display: "block" }}
         role="button"
-        aria-label={ariaLabel ?? (direction === "left" ? "Move left" : "Move right")}
+        aria-label={
+          ariaLabel ??
+          (direction === "left"
+            ? "Move left"
+            : direction === "right"
+              ? "Move right"
+              : "Speed up")
+        }
         onMouseDown={(e) => {
           e.preventDefault();
           handleDown();

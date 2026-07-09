@@ -1,6 +1,7 @@
 "use client";
 
 import gsap from "gsap";
+import Link from "next/link";
 import { useEffect, useLayoutEffect, useState, useCallback, useRef } from "react";
 import { GameDescBox } from "@/components/GameDescBox";
 import { MarathonProgressBar } from "@/components/MarathonProgressBar";
@@ -23,6 +24,7 @@ import {
 } from "@/lib/gameShellLayout";
 import { MARATHON_TOTAL_STEPS } from "@/lib/marathon";
 import { MARATHON_SCORE_DIGIT_COUNT } from "@/lib/scoreRing";
+import { useSiteMenuOptional } from "@/components/site-menu";
 import { useGameStore } from "@/stores/gameStore";
 
 export type GameShellChildState = {
@@ -70,6 +72,8 @@ export function GameShell({
   children,
 }: GameShellProps) {
   const nickname = useGameStore((state) => state.nickname);
+  const menu = useSiteMenuOptional();
+  const isMenuPaused = menu?.isOpen ?? false;
   const hexChipBg =
     nickname && /^#?[0-9A-F]{6}$/i.test(nickname)
       ? nickname.startsWith("#")
@@ -89,14 +93,14 @@ export function GameShell({
     initialScoreRef.current = initialScore;
   });
 
-  // Timer
+  // Timer — menü açıkken duraklat
   useEffect(() => {
-    if (!isPlaying || timeLeft <= 0) return;
+    if (!isPlaying || timeLeft <= 0 || isMenuPaused) return;
     const interval = setInterval(() => {
       setTimeLeft((prev) => Math.max(0, prev - 1));
     }, 1000);
     return () => clearInterval(interval);
-  }, [timeLeft, isPlaying]);
+  }, [timeLeft, isPlaying, isMenuPaused]);
 
   // Yeni oyun — skor maratondan gelir; shell girişi yalnızca ilk seferde oynar.
   // useLayoutEffect: reset, child'ın onGameStart (passive) efektinden ÖNCE
@@ -228,8 +232,10 @@ export function GameShell({
         className="relative z-60 shrink-0"
         style={{ height: SHELL_HEADER_HEIGHT, opacity: 0 }}
       >
-        <div
+        <Link
           id="gs-site-logo"
+          href="/"
+          aria-label="Go to home"
           className="absolute left-1/2 flex -translate-x-1/2 items-center justify-center"
           style={{
             top: SHELL_LOGO_TOP,
@@ -242,9 +248,9 @@ export function GameShell({
           <img
             src="/layers/goodeyelogo.gif"
             alt="Good Eye Club"
-            className="pointer-events-none h-full w-full select-none object-contain"
+            className="h-full w-full cursor-pointer select-none object-contain"
           />
-        </div>
+        </Link>
 
         <div
           id="gs-progress-row"
@@ -366,7 +372,7 @@ export function GameShell({
             style={{
               width: `${panelWidth}px`,
               height: `${rowHeight}px`,
-              backgroundColor: "#FFFFFF",
+              backgroundColor: "transparent",
               fontFamily: "var(--font-planc), serif",
               fontSize: `${scoreFontSize}px`,
               fontWeight: 500,

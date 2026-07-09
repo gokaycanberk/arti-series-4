@@ -34,23 +34,61 @@ function readBoxSize() {
   };
 }
 
-/** Gradient Guru ile aynı: TL bracket sol-üst, BR bracket merkez — birlikte + oluşturur */
-const PLUS_TL_LEFT = `calc(50% - ${WHY_BRACKET_SIZE}px)`;
-const PLUS_TL_TOP = `calc(50% - ${WHY_BRACKET_SIZE}px)`;
-const PLUS_BR_LEFT = "50%";
-const PLUS_BR_TOP = "50%";
+/** Kapalı + kol uzunluğu — SVG merkez kolu ile açık bracket kolu aynı kalır */
+const WHY_BRACKET_THICK = 1;
+const WHY_BRACKET_ARM = Math.round(WHY_BRACKET_SIZE / 2);
+/** Bracket kolları border stroke üzerine oturur */
+const BRACKET_REST_OFFSET = WHY_BRACKET_ARM - WHY_BRACKET_THICK;
+const PANEL_EASE = "power2.inOut";
+
+const TL_OPEN_LEFT = -BRACKET_REST_OFFSET;
+const TL_OPEN_TOP = -BRACKET_REST_OFFSET;
+
+function brOpenLeft(boxW: number) {
+  return boxW - WHY_BRACKET_THICK;
+}
+
+function brOpenTop(boxH: number) {
+  return boxH - WHY_BRACKET_THICK;
+}
+
+function closedBracketPositions(boxW: number, boxH: number) {
+  const cx = boxW / 2;
+  const cy = boxH / 2;
+  return {
+    tlLeft: cx - WHY_BRACKET_ARM,
+    tlTop: cy - WHY_BRACKET_ARM,
+    brLeft: cx,
+    brTop: cy,
+  };
+}
+
+function snapOpenBrackets(
+  tlEl: HTMLElement,
+  brEl: HTMLElement,
+  boxWrap: HTMLElement,
+  boxW: number,
+  boxH: number,
+) {
+  gsap.set(tlEl, { left: TL_OPEN_LEFT, top: TL_OPEN_TOP });
+  gsap.set(brEl, { left: brOpenLeft(boxW), top: brOpenTop(boxH) });
+  gsap.set(boxWrap, { scale: 1 });
+}
 
 export function WhyPanel() {
   const { view, closeWhy, lockRef } = useSiteMenu();
   const active = view === "why";
 
   const rootRef = useRef<HTMLDivElement>(null);
+  const stageRef = useRef<HTMLDivElement>(null);
   const plusRef = useRef<SVGSVGElement>(null);
   const bracketTLRef = useRef<HTMLDivElement>(null);
   const bracketBRRef = useRef<HTMLDivElement>(null);
+  const boxWrapRef = useRef<HTMLDivElement>(null);
   const boxRef = useRef<HTMLDivElement>(null);
   const backRef = useRef<HTMLButtonElement>(null);
   const tlRef = useRef<gsap.core.Timeline | null>(null);
+  const settledRef = useRef(false);
   const [boxSize, setBoxSize] = useState(readBoxSize);
 
   useEffect(() => {
@@ -63,50 +101,48 @@ export function WhyPanel() {
     const plus = plusRef.current;
     const tlEl = bracketTLRef.current;
     const brEl = bracketBRRef.current;
-    const box = boxRef.current;
+    const boxWrap = boxWrapRef.current;
     const back = backRef.current;
-    if (!plus || !tlEl || !brEl || !box || !back) return;
+    if (!plus || !tlEl || !brEl || !boxWrap || !back) return;
 
     tlRef.current?.kill();
+    settledRef.current = false;
 
     const { w, h } = readBoxSize();
-    const halfW = w / 2;
-    const halfH = h / 2;
+    const closed = closedBracketPositions(w, h);
 
     gsap.set(rootRef.current, { pointerEvents: "auto", opacity: 1 });
     gsap.set(plus, { opacity: 1 });
 
     gsap.set(tlEl, {
-      left: PLUS_TL_LEFT,
-      top: PLUS_TL_TOP,
+      left: closed.tlLeft,
+      top: closed.tlTop,
       opacity: 0,
     });
     gsap.set(brEl, {
-      left: PLUS_BR_LEFT,
-      top: PLUS_BR_TOP,
+      left: closed.brLeft,
+      top: closed.brTop,
       opacity: 0,
     });
 
-    gsap.set(box, {
-      width: w,
-      height: h,
-      left: "50%",
-      top: "50%",
-      xPercent: -50,
-      yPercent: -50,
+    gsap.set(boxWrap, {
       scale: 0,
       transformOrigin: "center center",
     });
     gsap.set(back, { opacity: 0, pointerEvents: "none" });
 
-    const tl = gsap.timeline();
+    const tl = gsap.timeline({
+      onComplete: () => {
+        settledRef.current = true;
+        snapOpenBrackets(tlEl, brEl, boxWrap, w, h);
+      },
+    });
     tlRef.current = tl;
 
     tl.to({}, { duration: WHY_PLUS_HOLD });
 
     const openAt = WHY_PLUS_HOLD;
 
-    // Beklemede yalnızca SVG +; genişleme başlarken bracket'lar devralır
     tl.set(plus, { opacity: 0 }, openAt);
     tl.set(tlEl, { opacity: 1 }, openAt);
     tl.set(brEl, { opacity: 1 }, openAt);
@@ -114,29 +150,31 @@ export function WhyPanel() {
     tl.to(
       tlEl,
       {
-        left: `calc(50% - ${halfW + WHY_BRACKET_SIZE}px)`,
-        top: `calc(50% - ${halfH + WHY_BRACKET_SIZE}px)`,
+        left: TL_OPEN_LEFT,
+        top: TL_OPEN_TOP,
         duration: WHY_PANEL_DURATION,
-        ease: "power3.out",
+        ease: PANEL_EASE,
+        roundProps: "left,top",
       },
       openAt,
     );
     tl.to(
       brEl,
       {
-        left: `calc(50% + ${halfW}px)`,
-        top: `calc(50% + ${halfH}px)`,
+        left: brOpenLeft(w),
+        top: brOpenTop(h),
         duration: WHY_PANEL_DURATION,
-        ease: "power3.out",
+        ease: PANEL_EASE,
+        roundProps: "left,top",
       },
       openAt,
     );
     tl.to(
-      box,
+      boxWrap,
       {
         scale: 1,
         duration: WHY_PANEL_DURATION,
-        ease: "power3.out",
+        ease: PANEL_EASE,
       },
       openAt,
     );
@@ -144,13 +182,13 @@ export function WhyPanel() {
       back,
       {
         opacity: 1,
-        duration: 0.45,
+        duration: 0.35,
         ease: "power2.out",
         onComplete: () => {
           gsap.set(back, { pointerEvents: "auto" });
         },
       },
-      openAt + WHY_PANEL_DURATION - 0.15,
+      openAt + WHY_PANEL_DURATION - 0.12,
     );
   }, []);
 
@@ -159,18 +197,21 @@ export function WhyPanel() {
       const plus = plusRef.current;
       const tlEl = bracketTLRef.current;
       const brEl = bracketBRRef.current;
-      const box = boxRef.current;
+      const boxWrap = boxWrapRef.current;
       const back = backRef.current;
-      if (!plus || !tlEl || !brEl || !box || !back) {
+      if (!plus || !tlEl || !brEl || !boxWrap || !back) {
         onDone();
         return;
       }
 
       tlRef.current?.kill();
       lockRef.current = true;
+      settledRef.current = false;
       gsap.set(back, { pointerEvents: "none" });
 
       const closeDur = WHY_PANEL_DURATION;
+      const { w, h } = readBoxSize();
+      const closed = closedBracketPositions(w, h);
 
       const tl = gsap.timeline({
         onComplete: () => {
@@ -180,37 +221,40 @@ export function WhyPanel() {
       });
       tlRef.current = tl;
 
-      tl.to(back, { opacity: 0, duration: 0.25 });
-      tl.to(box, { scale: 0, duration: closeDur, ease: "power3.in" }, 0.1);
+      tl.to(back, { opacity: 0, duration: 0.2 });
+      tl.to(boxWrap, { scale: 0, duration: closeDur, ease: PANEL_EASE }, 0.08);
       tl.to(
         tlEl,
         {
-          left: PLUS_TL_LEFT,
-          top: PLUS_TL_TOP,
+          left: closed.tlLeft,
+          top: closed.tlTop,
           duration: closeDur,
-          ease: "power3.in",
+          ease: PANEL_EASE,
+          roundProps: "left,top",
         },
-        0.1,
+        0.08,
       );
       tl.to(
         brEl,
         {
-          left: PLUS_BR_LEFT,
-          top: PLUS_BR_TOP,
+          left: closed.brLeft,
+          top: closed.brTop,
           duration: closeDur,
-          ease: "power3.in",
+          ease: PANEL_EASE,
+          roundProps: "left,top",
         },
-        0.1,
+        0.08,
       );
-      tl.to([tlEl, brEl], { opacity: 0, duration: 0.15 }, closeDur);
-      tl.to(plus, { opacity: 1, duration: 0.2 }, closeDur);
-      tl.to({}, { duration: 0.35 });
+      tl.to([tlEl, brEl], { opacity: 0, duration: 0.12 }, closeDur);
+      tl.to(plus, { opacity: 1, duration: 0.18 }, closeDur);
+      tl.to({}, { duration: 0.15 });
     },
     [lockRef],
   );
 
   useLayoutEffect(() => {
     if (!active) {
+      settledRef.current = false;
       gsap.set(rootRef.current, { pointerEvents: "none", opacity: 0 });
       return;
     }
@@ -218,13 +262,23 @@ export function WhyPanel() {
     return () => {
       tlRef.current?.kill();
     };
-  }, [active, runEnter, boxSize.w, boxSize.h]);
+  }, [active, runEnter]);
+
+  // Yeniden boyutlanınca animasyonu tekrar oynatma — sadece açık konuma snap
+  useEffect(() => {
+    if (!active || !settledRef.current) return;
+    const tlEl = bracketTLRef.current;
+    const brEl = bracketBRRef.current;
+    const boxWrap = boxWrapRef.current;
+    if (!tlEl || !brEl || !boxWrap) return;
+    snapOpenBrackets(tlEl, brEl, boxWrap, boxSize.w, boxSize.h);
+  }, [active, boxSize.w, boxSize.h]);
 
   const handleBack = () => {
     runExit(() => closeWhy());
   };
 
-  const half = WHY_BRACKET_SIZE / 2;
+  const plusHalf = WHY_BRACKET_SIZE / 2;
 
   return (
     <div
@@ -233,108 +287,140 @@ export function WhyPanel() {
       style={{ zIndex: 55 }}
       aria-hidden={!active}
     >
-      {/* Ortadaki + — Gradient Guru ile aynı */}
-      <svg
-        ref={plusRef}
-        className="pointer-events-none absolute left-1/2 top-1/2 z-10 -translate-x-1/2 -translate-y-1/2"
-        width={WHY_BRACKET_SIZE}
-        height={WHY_BRACKET_SIZE}
-        aria-hidden
-      >
-        <line
-          x1={0}
-          y1={half}
-          x2={WHY_BRACKET_SIZE}
-          y2={half}
-          stroke={MENU_INK}
-          strokeWidth={1}
-        />
-        <line
-          x1={half}
-          y1={0}
-          x2={half}
-          y2={WHY_BRACKET_SIZE}
-          stroke={MENU_INK}
-          strokeWidth={1}
-        />
-      </svg>
-
       <div
-        ref={bracketTLRef}
-        className="pointer-events-none absolute z-[5]"
+        ref={stageRef}
+        className="absolute"
         style={{
-          width: WHY_BRACKET_SIZE,
-          height: WHY_BRACKET_SIZE,
-          opacity: 0,
-        }}
-      >
-        <div
-          style={{
-            position: "absolute",
-            bottom: 0,
-            left: 0,
-            width: "100%",
-            height: 1,
-            backgroundColor: MENU_INK,
-          }}
-        />
-        <div
-          style={{
-            position: "absolute",
-            top: 0,
-            right: 0,
-            width: 1,
-            height: "100%",
-            backgroundColor: MENU_INK,
-          }}
-        />
-      </div>
-
-      <div
-        ref={bracketBRRef}
-        className="pointer-events-none absolute z-[5]"
-        style={{
-          width: WHY_BRACKET_SIZE,
-          height: WHY_BRACKET_SIZE,
-          opacity: 0,
-        }}
-      >
-        <div
-          style={{
-            position: "absolute",
-            top: 0,
-            left: 0,
-            width: "100%",
-            height: 1,
-            backgroundColor: MENU_INK,
-          }}
-        />
-        <div
-          style={{
-            position: "absolute",
-            top: 0,
-            left: 0,
-            width: 1,
-            height: "100%",
-            backgroundColor: MENU_INK,
-          }}
-        />
-      </div>
-
-      <div
-        ref={boxRef}
-        className="absolute flex flex-col items-start justify-center overflow-hidden bg-black"
-        style={{
-          padding: "16px 16px 16px 43px",
+          left: "50%",
+          top: "50%",
           width: boxSize.w,
           height: boxSize.h,
+          transform: "translate(-50%, -50%)",
         }}
       >
-        <div
-          className="why-panel-content whitespace-pre-wrap"
-          style={{ width: boxSize.w - 59 }}
+        {/* Kapalı + — merkezde sabit boyut */}
+        <svg
+          ref={plusRef}
+          className="pointer-events-none absolute z-10"
+          style={{
+            left: "50%",
+            top: "50%",
+            transform: "translate(-50%, -50%)",
+          }}
+          width={WHY_BRACKET_SIZE}
+          height={WHY_BRACKET_SIZE}
+          aria-hidden
         >
-          {WHY_TEXT}
+          <line
+            x1={0}
+            y1={plusHalf}
+            x2={WHY_BRACKET_SIZE}
+            y2={plusHalf}
+            stroke={MENU_INK}
+            strokeWidth={WHY_BRACKET_THICK}
+          />
+          <line
+            x1={plusHalf}
+            y1={0}
+            x2={plusHalf}
+            y2={WHY_BRACKET_SIZE}
+            stroke={MENU_INK}
+            strokeWidth={WHY_BRACKET_THICK}
+          />
+        </svg>
+
+        {/* Sol-üst bracket — kol uzunluğu sabit */}
+        <div
+          ref={bracketTLRef}
+          className="pointer-events-none absolute z-[5]"
+          style={{
+            width: WHY_BRACKET_ARM,
+            height: WHY_BRACKET_ARM,
+            opacity: 0,
+          }}
+        >
+          <div
+            style={{
+              position: "absolute",
+              bottom: 0,
+              left: 0,
+              width: "100%",
+              height: WHY_BRACKET_THICK,
+              backgroundColor: MENU_INK,
+            }}
+          />
+          <div
+            style={{
+              position: "absolute",
+              top: 0,
+              right: 0,
+              width: WHY_BRACKET_THICK,
+              height: "100%",
+              backgroundColor: MENU_INK,
+            }}
+          />
+        </div>
+
+        {/* Sağ-alt bracket — kol uzunluğu sabit */}
+        <div
+          ref={bracketBRRef}
+          className="pointer-events-none absolute z-[5]"
+          style={{
+            width: WHY_BRACKET_ARM,
+            height: WHY_BRACKET_ARM,
+            opacity: 0,
+          }}
+        >
+          <div
+            style={{
+              position: "absolute",
+              top: 0,
+              left: 0,
+              width: "100%",
+              height: WHY_BRACKET_THICK,
+              backgroundColor: MENU_INK,
+            }}
+          />
+          <div
+            style={{
+              position: "absolute",
+              top: 0,
+              left: 0,
+              width: WHY_BRACKET_THICK,
+              height: "100%",
+              backgroundColor: MENU_INK,
+            }}
+          />
+        </div>
+
+        <div
+          ref={boxWrapRef}
+          className="absolute inset-0"
+          style={{ transformOrigin: "center center" }}
+        >
+          <div
+            ref={boxRef}
+            className="absolute inset-0 flex flex-col items-start justify-center overflow-hidden bg-black"
+            style={{
+              padding: "16px 16px 16px 43px",
+            }}
+          >
+            <div
+              className="why-panel-content whitespace-pre-wrap"
+              style={{ width: boxSize.w - 59 }}
+            >
+              {WHY_TEXT}
+            </div>
+          </div>
+
+          {/* Border — gradient kutusu gibi ayrı katman, bracket'lar buna hizalanır */}
+          <div
+            className="pointer-events-none absolute inset-0 z-1"
+            style={{
+              border: `${WHY_BRACKET_THICK}px solid ${MENU_INK}`,
+              boxSizing: "border-box",
+            }}
+          />
         </div>
       </div>
 

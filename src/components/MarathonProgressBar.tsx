@@ -32,9 +32,20 @@ export function MarathonProgressBar({ step }: MarathonProgressBarProps) {
         style={{
           height: BAR_HEIGHT,
           border: SHELL_STROKE,
-          background: "linear-gradient(90deg, #DAE7FF 0%, #95A8D2 100%)",
+          background: "transparent",
         }}
       >
+        {/* İlerleme dolgusu — gradient tüm bar boyunca sabit, sadece
+            tamamlanan kısım açığa çıkar (kalan kısım transparan) */}
+        <div
+          className="pointer-events-none absolute inset-0"
+          style={{
+            background: "linear-gradient(90deg, #DAE7FF 0%, #95A8D2 100%)",
+            clipPath: `inset(0 ${100 - avatarLeft}% 0 0)`,
+            transition: "clip-path 0.5s ease",
+          }}
+        />
+
         {/* 5 ana oyun segmenti — eşit genişlik */}
         {Array.from({ length: MARATHON_MAIN_GAMES }).map((_, segmentIndex) => {
           const subs = marathonSubdivisions(segmentIndex);

@@ -113,7 +113,6 @@ export default function OpticalPanic({
   const wordTextRef = useRef<HTMLDivElement>(null);
   const wordRowRef = useRef<HTMLDivElement>(null);
   const baselineRef = useRef<HTMLDivElement>(null);
-  const scoreAnchorRef = useRef<HTMLDivElement>(null);
   const fallingAreaRef = useRef<HTMLDivElement>(null);
   const fallingWordRowRef = useRef<HTMLDivElement>(null);
   const fallingWordWrapRef = useRef<HTMLDivElement>(null);
@@ -213,7 +212,6 @@ export default function OpticalPanic({
     if (!text || !row) return;
 
     row.style.transform = "none";
-    if (scoreAnchorRef.current) scoreAnchorRef.current.style.transform = "none";
     if (fallingWordRowRef.current) fallingWordRowRef.current.style.transform = "none";
     if (line) line.style.marginTop = "0";
 
@@ -556,9 +554,15 @@ export default function OpticalPanic({
     };
   }, [moveLeft, moveRight, speedUp, isMenuPaused]);
 
-  const handleScoreFlyComplete = useCallback(
+  const handleScoreLand = useCallback(
     (points: number) => {
       addRoundScore(points);
+    },
+    [addRoundScore],
+  );
+
+  const handleScoreFlyComplete = useCallback(
+    (points: number) => {
       setFlyScore(null);
 
       setTimeout(() => {
@@ -578,7 +582,7 @@ export default function OpticalPanic({
         onGameComplete?.();
       }, NOTE_AFTER_SCORE_DELAY + 2000);
     },
-    [addRoundScore, onAnswer, onGameComplete],
+    [onAnswer, onGameComplete],
   );
 
   const wordChars = currentWord.word.split("");
@@ -735,14 +739,6 @@ export default function OpticalPanic({
           style={{ bottom: WORD_BOTTOM }}
         >
           <div className="relative flex justify-center">
-            <div
-              ref={scoreAnchorRef}
-              className="absolute left-1/2 -translate-x-1/2 pointer-events-none"
-              style={{
-                bottom: "100%",
-                marginBottom: "clamp(140px, calc(28vh - 30px), 260px)",
-              }}
-            />
             <div ref={wordRowRef} className="flex justify-center">
               <div
                 ref={wordTextRef}
@@ -822,8 +818,7 @@ export default function OpticalPanic({
         <ScoreFlyPopup
           key={flyScore}
           points={flyScore}
-          anchorRef={scoreAnchorRef}
-          flyTargetLift={100}
+          onScoreLand={() => handleScoreLand(flyScore)}
           onComplete={() => handleScoreFlyComplete(flyScore)}
         />
       )}

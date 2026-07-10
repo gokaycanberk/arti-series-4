@@ -4,7 +4,9 @@ import ScoreSideReveal from "./ScoreSideReveal";
 
 interface ScoreFlyPopupProps {
   points: number;
-  anchorRef: React.RefObject<HTMLElement | null>;
+  /** Etiket BAM / reveal sonu — scoreboard'a puan yazılır */
+  onScoreLand?: () => void;
+  /** Uçuş animasyonu bitti — cleanup */
   onComplete?: () => void;
   targetId?: string;
   label?: string | null;
@@ -12,21 +14,22 @@ interface ScoreFlyPopupProps {
   flyTargetLift?: number;
 }
 
+/** Ortak skor popup — konum viewport merkezi (ScoreSideReveal) */
 export default function ScoreFlyPopup({
   points,
-  anchorRef,
+  onScoreLand,
   onComplete,
   targetId,
   label,
   flyToScore = true,
-  flyTargetLift,
+  flyTargetLift = 100,
 }: ScoreFlyPopupProps) {
   if (!flyToScore) return null;
 
   return (
     <ScoreSideReveal
       points={points}
-      anchorRef={anchorRef}
+      onScoreLand={onScoreLand}
       onComplete={onComplete}
       targetId={targetId}
       label={label}

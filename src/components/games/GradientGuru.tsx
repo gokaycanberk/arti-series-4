@@ -7,8 +7,7 @@ import { GameDescBox } from "@/components/GameDescBox";
 import { GameIntroOverlay } from "@/components/GameIntroOverlay";
 import { introPendingPhase, shouldSkipIntroCard } from "@/lib/gameIntro";
 import { useGameIntroPlay } from "@/lib/useGameIntroPlay";
-import ScoreSideReveal, { GURU_STACK_STEP } from "@/components/games/ScoreSideReveal";
-import { SCORE_STACK_LAYERS } from "@/components/games/scoreUtils";
+import ScoreSideReveal from "@/components/games/ScoreSideReveal";
 import {
   averageGradientMissPx,
   hasUserMovedGuesses,
@@ -82,9 +81,6 @@ const DOT_DROP_DURATION = 2.4;
 /** Done tuşu — bırakma animasyonu + fade */
 const DONE_RELEASE_HOLD = 0.22;
 const DONE_EXIT_DURATION = 0.28;
-
-/** Guru skor stack görsel merkez düzeltmesi (katmanlar alta doğru) */
-const GURU_SCORE_STACK_LAYERS = SCORE_STACK_LAYERS;
 
 const DESC_BODY =
   "Place the gradient points where you think they belong and trust your totally scientific understanding of gradients.";
@@ -175,7 +171,6 @@ export default function GradientGuru({
   ]);
   const [showReveal, setShowReveal] = useState(false);
   const [flyScore, setFlyScore] = useState<number | null>(null);
-  const [scoreOrigin, setScoreOrigin] = useState<Point | null>(null);
   const [doneExiting, setDoneExiting] = useState(false);
 
   /* ── Refs ── */
@@ -240,7 +235,6 @@ export default function GradientGuru({
       setGuesses([randomStartPos(), randomStartPos()]);
       setShowReveal(false);
       setFlyScore(null);
-      setScoreOrigin(null);
       doneExitTweenRef.current?.kill();
       setDoneExiting(false);
       if (doneWrapRef.current) {
@@ -499,15 +493,6 @@ export default function GradientGuru({
       setShowReveal(true);
 
       gsap.delayedCall(1.5, () => {
-        const stage = stageRef.current;
-        if (stage) {
-          const r = stage.getBoundingClientRect();
-          const stackDepth = GURU_SCORE_STACK_LAYERS * GURU_STACK_STEP;
-          setScoreOrigin({
-            x: r.left + r.width / 2,
-            y: r.top + r.height / 2 - stackDepth * 0.5 - 72,
-          });
-        }
         setFlyScore(totalPts);
       });
     },
@@ -804,19 +789,15 @@ export default function GradientGuru({
       </div>
 
       {/* ── Score Fly Animation ── */}
-      {flyScore !== null && scoreOrigin && (
+      {flyScore !== null && (
         <ScoreSideReveal
           key={`${gameKey}-${round}-${flyScore}`}
           points={flyScore}
-          anchorRef={stageRef}
-          origin={scoreOrigin}
-          variant="gradient-guru"
           flyTargetLift={100}
           onScoreLand={() => addRoundScore(pendingScore.current)}
           onComplete={() => {
             queueMicrotask(() => {
               setFlyScore(null);
-              setScoreOrigin(null);
               collapse();
             });
           }}

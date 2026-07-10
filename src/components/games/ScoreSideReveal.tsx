@@ -10,6 +10,7 @@ import {
   SCORE_STACK_LAYERS,
   SCORE_STACK_STEP,
   SCORE_ORIGIN_Y_OFFSET,
+  getDefaultScoreOrigin,
 } from "./scoreUtils";
 
 interface Point {
@@ -19,7 +20,9 @@ interface Point {
 
 interface ScoreSideRevealProps {
   points: number;
-  anchorRef: React.RefObject<HTMLElement | null>;
+  anchorRef?: React.RefObject<HTMLElement | null>;
+  /** BezierBrain: sadece X anchor'dan, Y herkeste aynı */
+  anchorXOnly?: boolean;
   origin?: Point | null;
   onFlyStart?: () => void;
   onScoreLand?: () => void;
@@ -78,6 +81,21 @@ function stackVisualCenterY(stackY: number) {
   return stackY - (SCORE_STACK_LAYERS - 1) * SCORE_STACK_STEP * LABEL_Y_RATIO;
 }
 
+function resolveRawOrigin(
+  fixedOrigin: Point | null | undefined,
+  anchor: HTMLElement | null,
+  anchorXOnly: boolean,
+): Point {
+  const fallback = getDefaultScoreOrigin();
+  if (fixedOrigin) return fixedOrigin;
+  if (!anchor) return fallback;
+  const anchorPt = readAnchorOrigin(anchor);
+  if (anchorXOnly) {
+    return { x: anchorPt.x, y: fallback.y };
+  }
+  return anchorPt;
+}
+
 function setCenter(el: HTMLElement, x: number, y: number) {
   gsap.set(el, { x, y, xPercent: -50, yPercent: -50 });
 }
@@ -93,6 +111,7 @@ function flyOrderForLayer(index: number) {
 export default function ScoreSideReveal({
   points,
   anchorRef,
+  anchorXOnly = false,
   origin: fixedOrigin,
   onFlyStart,
   onScoreLand,
@@ -121,12 +140,11 @@ export default function ScoreSideReveal({
     const labelEl = labelRef.current;
     if (!root) return;
 
-    const rawOrigin = fixedOrigin
-      ? fixedOrigin
-      : anchorRef.current
-        ? readAnchorOrigin(anchorRef.current)
-        : null;
-    if (!rawOrigin) return;
+    const rawOrigin = resolveRawOrigin(
+      fixedOrigin,
+      anchorRef?.current ?? null,
+      anchorXOnly,
+    );
 
     const startOrigin = {
       x: rawOrigin.x,
@@ -352,7 +370,7 @@ export default function ScoreSideReveal({
     return () => {
       ctx.revert();
     };
-  }, [anchorRef, fixedOrigin, points, label, targetId, flyTargetLift]);
+  }, [anchorRef, anchorXOnly, fixedOrigin, points, label, targetId, flyTargetLift]);
 
   return (
     <div

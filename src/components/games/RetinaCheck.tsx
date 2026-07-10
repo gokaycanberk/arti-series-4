@@ -234,7 +234,6 @@ export default function RetinaCheck({
   const leftGuideRef = useRef<HTMLSpanElement>(null);
   const rightGuideRef = useRef<HTMLSpanElement>(null);
   const descBoxRef = useRef<HTMLDivElement>(null);
-  const scoreAnchorRef = useRef<HTMLDivElement>(null);
   const pickedRef = useRef(false);
   const revealPendingRef = useRef(false);
   const revealPointsRef = useRef(0);
@@ -605,15 +604,21 @@ export default function RetinaCheck({
     });
   }, [phase, biggerSide, runRevealAnimation]);
 
-  const handleScoreFlyComplete = useCallback(
+  const handleScoreLand = useCallback(
     (points: number) => {
       addRoundScore(points);
+    },
+    [addRoundScore],
+  );
+
+  const handleScoreFlyComplete = useCallback(
+    (points: number) => {
       setFlyScore(null);
       setPhase("scored");
       onAnswer(points >= 500);
       onGameComplete?.();
     },
-    [addRoundScore, onAnswer, onGameComplete],
+    [onAnswer, onGameComplete],
   );
 
   useEffect(() => {
@@ -709,12 +714,6 @@ export default function RetinaCheck({
             : undefined
         }
       >
-        <div
-          ref={scoreAnchorRef}
-          className="absolute left-1/2 top-[22%] -translate-x-1/2 pointer-events-none z-20"
-          style={{ width: 1, height: 1 }}
-        />
-
         {(phase === "playing" || phase === "reveal" || phase === "scored") && (
           <div
             ref={pairRef}
@@ -798,8 +797,7 @@ export default function RetinaCheck({
         <ScoreFlyPopup
           key={flyScore}
           points={flyScore}
-          anchorRef={scoreAnchorRef}
-          flyTargetLift={100}
+          onScoreLand={() => handleScoreLand(flyScore)}
           onComplete={() => handleScoreFlyComplete(flyScore)}
         />
       )}

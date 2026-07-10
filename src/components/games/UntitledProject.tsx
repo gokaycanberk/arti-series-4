@@ -314,9 +314,6 @@ export default function UntitledProject({
   const [savedCount, setSavedCount] = useState(0);
   const [exitingIds, setExitingIds] = useState<Set<number>>(new Set());
   const [flyScore, setFlyScore] = useState<number | null>(null);
-  const [scoreOrigin, setScoreOrigin] = useState<{ x: number; y: number } | null>(
-    null,
-  );
   const [phase, setPhase] = useState<Phase>("intro");
   const [tabsRevealed, setTabsRevealed] = useState(false);
   const [burstVisibleCount, setBurstVisibleCount] = useState(0);
@@ -373,7 +370,6 @@ export default function UntitledProject({
       setActiveModal(null);
       setExitingIds(new Set());
       setFlyScore(null);
-      setScoreOrigin(null);
       setTabsRevealed(false);
       setBurstVisibleCount(0);
       setBurstDone(false);
@@ -447,28 +443,12 @@ export default function UntitledProject({
     };
   }, [phase, gameKey]);
 
-  const resolveScoreOrigin = useCallback(() => {
-    const el = playfieldRef.current;
-    if (el) {
-      const r = el.getBoundingClientRect();
-      return {
-        x: r.left + r.width / 2,
-        y: r.top + r.height * 0.42,
-      };
-    }
-    return {
-      x: window.innerWidth / 2,
-      y: window.innerHeight * 0.55,
-    };
-  }, []);
-
   const handleScoreLand = useCallback(() => {
     addRoundScore(pendingScoreRef.current);
   }, [addRoundScore]);
 
   const handleScoreFlyComplete = useCallback(() => {
     setFlyScore(null);
-    setScoreOrigin(null);
     endGame?.();
     onGameComplete?.();
   }, [endGame, onGameComplete]);
@@ -487,9 +467,8 @@ export default function UntitledProject({
     setActiveModal(null);
     const points = scoreFromUntitledSaves(savedCountRef.current);
     pendingScoreRef.current = points;
-    setScoreOrigin(resolveScoreOrigin());
     setFlyScore(points);
-  }, [phase, isPlaying, timeLeft, flyScore, resolveScoreOrigin]);
+  }, [phase, isPlaying, timeLeft, flyScore]);
 
   const removeFileAfterFade = useCallback(
     (fileId: number, wasSaved: boolean) => {
@@ -666,13 +645,10 @@ export default function UntitledProject({
         {DESC_BODY}
       </GameDescBox>
 
-      {flyScore !== null && scoreOrigin && (
+      {flyScore !== null && (
         <ScoreSideReveal
           key={`${gameKey}-${round}-${flyScore}`}
           points={flyScore}
-          anchorRef={playfieldRef}
-          origin={scoreOrigin}
-          variant="gradient-guru"
           flyTargetLift={100}
           onScoreLand={handleScoreLand}
           onComplete={handleScoreFlyComplete}

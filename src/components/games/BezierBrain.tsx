@@ -1110,7 +1110,7 @@ export default function BezierBrain({
             key={flyScore}
             points={flyScore}
             anchorRef={scoreAnchorRef}
-            variant="gradient-guru"
+            anchorXOnly
             flyTargetLift={100}
             onFlyStart={runLetterExit}
             onScoreLand={() => handleScoreLand(flyScore)}

@@ -87,6 +87,25 @@ export const SCORE_STACK_STEP = 15;
 /** Skor popup başlangıcını ekranda biraz aşağı kaydırır — scoreboard kavisini düzeltir */
 export const SCORE_ORIGIN_Y_OFFSET = 75;
 
+/** BezierBrain hariç tüm oyunlarda ortak dikey hiza */
+export const SCORE_ORIGIN_Y_RATIO = 0.42;
+
+export interface ScoreOriginPoint {
+  x: number;
+  y: number;
+}
+
+/** Viewport merkezi — tek skor popup konumu */
+export function getDefaultScoreOrigin(): ScoreOriginPoint {
+  if (typeof window === "undefined") {
+    return { x: 0, y: 0 };
+  }
+  return {
+    x: window.innerWidth * 0.5,
+    y: window.innerHeight * SCORE_ORIGIN_Y_RATIO,
+  };
+}
+
 export type ScoreLabel =
   | "UNREAL!"
   | "SMOOTH!"

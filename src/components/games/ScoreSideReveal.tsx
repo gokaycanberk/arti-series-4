@@ -2,7 +2,15 @@
 
 import { useEffect, useLayoutEffect, useRef } from "react";
 import gsap from "gsap";
-import { getScoreLabel } from "./scoreUtils";
+import {
+  getLabelImpact,
+  getScoreLabel,
+  type ScoreLabel,
+  SCORE_STACK_COLORS,
+  SCORE_STACK_LAYERS,
+  SCORE_STACK_STEP,
+  SCORE_ORIGIN_Y_OFFSET,
+} from "./scoreUtils";
 
 interface Point {
   x: number;
@@ -12,128 +20,76 @@ interface Point {
 interface ScoreSideRevealProps {
   points: number;
   anchorRef: React.RefObject<HTMLElement | null>;
-  /** Sabit başlangıç noktası — collapse sırasında anchor kaymasını önler */
   origin?: Point | null;
   onFlyStart?: () => void;
   onScoreLand?: () => void;
   onComplete?: () => void;
   targetId?: string;
   label?: string | null;
-  /** Gradient Guru: ortada alta katmanlı reveal → devrilerek sağ üste uçuş */
+  /** @deprecated — tek Figma animasyonu */
   variant?: "default" | "gradient-guru";
-  /** İniş noktasını yukarı kaydır (px) — skorun scoreboard arkasına ulaşması için */
   flyTargetLift?: number;
 }
 
-const DEFAULT_FONT = 132;
-const GURU_FONT = 168;
-const HOLD_DEFAULT = 1.5;
-const HOLD_GURU = 1.8;
-const FLY_DEFAULT = 2.1;
-const FLY_GURU = 2.5;
-const ARC_DEFAULT = 210;
-const ARC_GURU = 280;
-const LAYER_OFFSET = 3.5;
+/** GradientGuru skor origin hesabı */
+export const GURU_STACK_STEP = SCORE_STACK_STEP;
 
-const GLYPH_LAYERS = ["#7CBFC8", "#5AAFB9", "#388897", "#266878"];
-const GLYPH_MAIN = "#BF406C";
+const FONT_SIZE = "clamp(140px, 16vw, 200px)";
+const LABEL_FONT = "clamp(22px, 3.2vw, 56px)";
+const LABEL_PAD_X = 8;
+const LABEL_PAD_Y = 6;
+const LAYER_STAGGER = 0.055;
+const LAYER_REVEAL = 0.36;
+const DRIFT_UP_PX = 10;
+const PRE_FLY_HOLD = 0.7;
 
-/** Figma Desktop-64: önden arkaya, üstten alta */
-const GURU_STACK_COLORS = [
-  "#FF3355",
-  "#FF9869",
-  "#FFD52E",
-  "#FF57B3",
-  "#9255D4",
-  "#4F8AFF",
-  "#3AE091",
-  "#45EDE2",
-];
-/** Figma: katmanlar arası dikey adım (px) */
-export const GURU_STACK_STEP = 8;
+/** Figma 20-1918 */
+const FLY_DURATION = 0.95;
+const FLY_LAYER_LAG = 0.052;
+const ARC_LIFT = 130;
+const LABEL_FADE = 0.28;
 
-const TRAIL_COLORS = [
-  "#5AD8FF",
-  "#69F0AE",
-  "#FF80AB",
-  "#FFD54F",
-  "#FF9100",
-  "#FF5252",
-];
+const LABEL_ROTATION = -20;
+const LABEL_Y_RATIO = 0.55;
 
 function quadBezier(t: number, p0: number, p1: number, p2: number) {
   const u = 1 - t;
   return u * u * p0 + 2 * u * t * p1 + t * t * p2;
 }
 
-function ScoreGlyph({
-  points,
-  fontSize,
-}: {
-  points: number;
-  fontSize: number;
-}) {
-  const text = `+${points}`;
-
-  return (
-    <div
-      className="relative"
-      style={{ fontFamily: "var(--font-planc), serif", fontWeight: 600 }}
-    >
-      {GLYPH_LAYERS.map((color, i) => (
-        <span
-          key={color}
-          aria-hidden
-          className="pointer-events-none absolute left-0 top-0 whitespace-nowrap"
-          style={{
-            fontSize,
-            color,
-            WebkitTextStroke: "1.5px #1A1A1A",
-            transform: `translate(${3 + i * LAYER_OFFSET}px, ${3 + i * LAYER_OFFSET}px)`,
-            opacity: 1 - i * 0.1,
-          }}
-        >
-          {text}
-        </span>
-      ))}
-      <span
-        className="relative whitespace-nowrap"
-        style={{
-          fontSize,
-          color: GLYPH_MAIN,
-          WebkitTextStroke: "1.5px #1A1A1A",
-        }}
-      >
-        {text}
-      </span>
-    </div>
-  );
-}
-
 function readAnchorOrigin(anchor: HTMLElement): Point {
   const r = anchor.getBoundingClientRect();
-  return {
-    x: r.left + r.width / 2,
-    y: r.top + r.height / 2,
-  };
+  return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
 }
 
 function readScoreTarget(targetId: string): Point | null {
   const el = document.getElementById(targetId);
   if (!el) return null;
   const r = el.getBoundingClientRect();
-  return {
-    x: r.left + r.width * 0.5,
-    y: r.top + r.height * 0.35,
-  };
+  return { x: r.left + r.width * 0.5, y: r.top + r.height * 0.35 };
 }
 
-/** Guru: katman i ana metnin altında (pozitif Y) */
-function guruStackY(originY: number, layerIndex: number) {
-  return originY + layerIndex * GURU_STACK_STEP;
+/** Katman i: 0 = alt (ilk renk), 7 = üst — yukarı doğru yığılır */
+function layerStackY(baseY: number, index: number) {
+  return baseY - index * SCORE_STACK_STEP;
 }
 
-/** S'nin sağında belirir, ardından sağ üst puan tablosuna uçar */
+function stackVisualCenterY(stackY: number) {
+  return stackY - (SCORE_STACK_LAYERS - 1) * SCORE_STACK_STEP * LABEL_Y_RATIO;
+}
+
+function setCenter(el: HTMLElement, x: number, y: number) {
+  gsap.set(el, { x, y, xPercent: -50, yPercent: -50 });
+}
+
+/** Uçuş sırası: 0 = en üst katman önce gider */
+function flyOrderForLayer(index: number) {
+  return SCORE_STACK_LAYERS - 1 - index;
+}
+
+/**
+ * Figma: 20-1654 ilk renk → 20-1831 yukarı yansıma → 13-1553 etiket → 20-1918 scoreboard
+ */
 export default function ScoreSideReveal({
   points,
   anchorRef,
@@ -143,22 +99,14 @@ export default function ScoreSideReveal({
   onComplete,
   targetId = "gs-score-digits",
   label: labelOverride,
-  variant = "default",
   flyTargetLift = 0,
 }: ScoreSideRevealProps) {
-  const isGuru = variant === "gradient-guru";
-  const fontSize = isGuru ? GURU_FONT : DEFAULT_FONT;
-  const holdDuration = isGuru ? HOLD_GURU : HOLD_DEFAULT;
-  const flyDuration = isGuru ? FLY_GURU : FLY_DEFAULT;
-  const arcLift = isGuru ? ARC_GURU : ARC_DEFAULT;
-  const ghostCount = isGuru ? 7 : 6;
   const rootRef = useRef<HTMLDivElement>(null);
-  const mainRef = useRef<HTMLDivElement>(null);
-  const ghostRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const layerRefs = useRef<(HTMLSpanElement | null)[]>([]);
+  const labelRef = useRef<HTMLDivElement>(null);
   const onFlyStartRef = useRef(onFlyStart);
   const onScoreLandRef = useRef(onScoreLand);
   const onCompleteRef = useRef(onComplete);
-  const scoreLandedRef = useRef(false);
   const label = labelOverride ?? getScoreLabel(points);
   const text = `+${points}`;
 
@@ -169,148 +117,204 @@ export default function ScoreSideReveal({
   }, [onFlyStart, onScoreLand, onComplete]);
 
   useLayoutEffect(() => {
-    scoreLandedRef.current = false;
-
     const root = rootRef.current;
-    const main = mainRef.current;
-    const anchor = anchorRef.current;
-    if (!root || !main) return;
+    const labelEl = labelRef.current;
+    if (!root) return;
 
-    const resolveOrigin = (): Point | null => {
-      if (fixedOrigin) return fixedOrigin;
-      if (!anchor) return null;
-      return readAnchorOrigin(anchor);
+    const rawOrigin = fixedOrigin
+      ? fixedOrigin
+      : anchorRef.current
+        ? readAnchorOrigin(anchorRef.current)
+        : null;
+    if (!rawOrigin) return;
+
+    const startOrigin = {
+      x: rawOrigin.x,
+      y: rawOrigin.y + SCORE_ORIGIN_Y_OFFSET,
     };
-
-    const startOrigin = resolveOrigin();
-    if (!startOrigin) return;
-
-    const setCenter = (el: HTMLElement, x: number, y: number) => {
-      gsap.set(el, { x, y, xPercent: -50, yPercent: -50 });
-    };
-
-    const revealScale = isGuru ? 1 : 0.78;
 
     const ctx = gsap.context(() => {
-      setCenter(main, startOrigin.x, startOrigin.y);
-      gsap.set(main, {
-        scale: revealScale,
-        opacity: 0,
-        rotation: isGuru ? 0 : -6,
-      });
+      const stack = { x: startOrigin.x, y: startOrigin.y };
 
-      ghostRefs.current.forEach((ghost, i) => {
-        if (!ghost) return;
-        setCenter(ghost, startOrigin.x, startOrigin.y);
-        gsap.set(ghost, {
-          scale: isGuru ? 1 : 0.72 - i * 0.05,
+      const syncStack = () => {
+        layerRefs.current.forEach((layer, i) => {
+          if (!layer) return;
+          setCenter(layer, stack.x, layerStackY(stack.y, i));
+        });
+        if (labelEl) {
+          setCenter(labelEl, stack.x, stackVisualCenterY(stack.y));
+        }
+      };
+
+      // Tüm katmanlar aynı noktada başlar — ilk renk
+      layerRefs.current.forEach((layer, i) => {
+        if (!layer) return;
+        setCenter(layer, stack.x, stack.y);
+        gsap.set(layer, {
           opacity: 0,
+          scale: 1,
           rotation: 0,
-          color: isGuru
-            ? GURU_STACK_COLORS[i + 1]
-            : TRAIL_COLORS[i % TRAIL_COLORS.length],
+          color: SCORE_STACK_COLORS[i],
+          transformOrigin: "50% 50%",
         });
       });
 
-      const flyParams = {
-        origin: startOrigin,
-        target: null as Point | null,
-        controlX: 0,
-        controlY: 0,
-        skipFly: false,
-      };
+      const labelImpact = label
+        ? getLabelImpact(label as ScoreLabel)
+        : null;
+
+      if (labelEl) {
+        setCenter(labelEl, stack.x, stackVisualCenterY(stack.y));
+        gsap.set(labelEl, {
+          opacity: 0,
+          scale: labelImpact?.startScale ?? 0,
+          rotation: labelImpact?.startRotation ?? LABEL_ROTATION,
+          transformOrigin: "50% 50%",
+        });
+      }
+
+      const revealDuration =
+        LAYER_REVEAL + (SCORE_STACK_LAYERS - 1) * LAYER_STAGGER;
 
       const tl = gsap.timeline({
         onComplete: () => onCompleteRef.current?.(),
       });
 
-      tl.to(main, {
-        scale: revealScale,
-        opacity: 1,
-        rotation: 0,
-        duration: isGuru ? 0.38 : 0.42,
-        ease: "back.out(2)",
+      // 20-1654 → 20-1831: ilk renk, sonra yukarı yansıma (aynı boyut)
+      layerRefs.current.forEach((layer, i) => {
+        if (!layer) return;
+        const at = i * LAYER_STAGGER;
+        const finalY = layerStackY(stack.y, i);
+
+        if (i === 0) {
+          tl.to(
+            layer,
+            { opacity: 1, duration: LAYER_REVEAL, ease: "power2.out" },
+            at,
+          );
+        } else {
+          const rise = { y: stack.y };
+          tl.set(layer, { opacity: 1 }, at);
+          tl.to(
+            rise,
+            {
+              y: finalY,
+              duration: LAYER_REVEAL,
+              ease: "power2.out",
+              onUpdate: () => setCenter(layer, stack.x, rise.y),
+            },
+            at,
+          );
+        }
       });
 
-      ghostRefs.current.forEach((ghost, i) => {
-        if (!ghost) return;
-        const layerIndex = i + 1;
+      // Hafif yukarı süzülme — stack tamamlandıktan sonra
+      tl.to(
+        stack,
+        {
+          y: startOrigin.y - DRIFT_UP_PX,
+          duration: 0.32,
+          ease: "power1.out",
+          onUpdate: syncStack,
+        },
+        revealDuration,
+      );
+
+      const labelAt = revealDuration + 0.38;
+
+      if (label && labelEl && labelImpact) {
+        tl.add(() => onFlyStartRef.current?.(), labelAt);
 
         tl.to(
-          ghost,
+          labelEl,
           {
-            opacity: isGuru ? 1 : 0.65 - i * 0.08,
-            x: startOrigin.x,
-            y: isGuru
-              ? guruStackY(startOrigin.y, layerIndex)
-              : startOrigin.y + 8 + i * 7,
-            xPercent: -50,
-            yPercent: -50,
-            duration: isGuru ? 0.4 : 0.35,
+            opacity: 1,
+            scale: labelImpact.overshoot,
+            rotation: LABEL_ROTATION,
+            duration: labelImpact.slam,
+            ease: "power4.in",
+          },
+          labelAt,
+        );
+
+        tl.to(
+          labelEl,
+          {
+            scale: 1,
+            duration: labelImpact.settle,
             ease: "power2.out",
           },
-          isGuru ? 0.06 + i * 0.04 : 0.08 + i * 0.05,
+          labelAt + labelImpact.slam,
         );
-      });
 
-      tl.to({}, { duration: holdDuration });
+        const labelPopDone = labelAt + labelImpact.slam + labelImpact.settle;
+        tl.add(() => onScoreLandRef.current?.(), labelPopDone);
+      } else {
+        tl.add(() => {
+          onFlyStartRef.current?.();
+          onScoreLandRef.current?.();
+        }, labelAt);
+      }
 
-      tl.call(() => {
-        onFlyStartRef.current?.();
+      tl.to({}, { duration: PRE_FLY_HOLD });
 
-        flyParams.origin = fixedOrigin ?? startOrigin;
-        flyParams.target = readScoreTarget(targetId);
-        if (!flyParams.target) {
-          flyParams.skipFly = true;
-          return;
-        }
+      const flyAt = tl.duration();
+      const flyTarget = readScoreTarget(targetId);
 
-        flyParams.target.y -= flyTargetLift;
-
-        const { origin, target } = flyParams;
-
-        setCenter(main, origin.x, origin.y);
-        ghostRefs.current.forEach((ghost, i) => {
-          if (!ghost) {
-            return;
-          }
-          setCenter(ghost, origin.x, guruStackY(origin.y, i + 1));
+      if (!flyTarget) {
+        layerRefs.current.forEach((layer) => {
+          if (!layer) return;
+          tl.to(
+            layer,
+            { opacity: 0, scale: 0.5, duration: 0.35, ease: "power2.in" },
+            flyAt,
+          );
         });
+        if (labelEl) {
+          tl.to(
+            labelEl,
+            { opacity: 0, scale: 0.5, duration: LABEL_FADE, ease: "power2.in" },
+            flyAt,
+          );
+        }
+        return;
+      }
 
-        const deltaX = target.x - origin.x;
-        const deltaY = target.y - origin.y;
-        flyParams.controlX =
-          origin.x + deltaX * 0.48 + Math.min(80, deltaX * 0.08);
-        flyParams.controlY = origin.y + deltaY * 0.08 - arcLift;
-      });
-
-      const positionOnArc = (
-        el: HTMLElement,
-        t: number,
-        layerIndex: number,
-      ) => {
-        if (flyParams.skipFly || !flyParams.target) return;
-        const { origin, target, controlX, controlY } = flyParams;
-        const stackOffset = isGuru ? layerIndex * GURU_STACK_STEP * (1 - t) : 0;
-        setCenter(
-          el,
-          quadBezier(t, origin.x, controlX, target.x),
-          quadBezier(t, origin.y, controlY, target.y) + stackOffset,
-        );
+      const target = {
+        x: flyTarget.x,
+        y: flyTarget.y - flyTargetLift,
       };
 
-      const flyAlongArc = (
-        el: HTMLElement,
-        layerIndex: number,
-        delay: number,
-        duration: number,
-        fromScale: number,
-        toScale: number,
-        fromOpacity: number,
-        toOpacity: number,
-        fromRotation: number,
-        toRotation: number,
-      ) => {
+      const stackCenterY =
+        stack.y - ((SCORE_STACK_LAYERS - 1) * SCORE_STACK_STEP) / 2;
+      const ctrlX =
+        stack.x + (target.x - stack.x) * 0.45 + Math.min(60, Math.abs(target.x - stack.x) * 0.06);
+      const ctrlY = stackCenterY + (target.y - stackCenterY) * 0.12 - ARC_LIFT;
+
+      if (labelEl) {
+        tl.to(
+          labelEl,
+          {
+            opacity: 0,
+            scale: 0.55,
+            duration: LABEL_FADE,
+            ease: "power3.in",
+          },
+          flyAt,
+        );
+      }
+
+      // 20-1918: üstten alta tren — aynı kavis, kademeli kalkış
+      layerRefs.current.forEach((layer, i) => {
+        if (!layer) return;
+
+        const flyOrder = flyOrderForLayer(i);
+        const delay = flyOrder * FLY_LAYER_LAG;
+        const duration = FLY_DURATION - flyOrder * 0.02;
+        const startX = stack.x;
+        const startY = layerStackY(stack.y, i);
+        const endScale = 0.05 + flyOrder * 0.009;
+        const endRotation = 62 - flyOrder * 7;
         const proxy = { t: 0 };
 
         tl.to(
@@ -319,202 +323,82 @@ export default function ScoreSideReveal({
             t: 1,
             duration,
             delay,
-            ease: "power1.inOut",
+            ease: "power1.in",
             onUpdate: () => {
-              positionOnArc(el, proxy.t, layerIndex);
-              if (
-                !scoreLandedRef.current &&
-                proxy.t >= 0.88 &&
-                el === main
-              ) {
-                scoreLandedRef.current = true;
-                onScoreLandRef.current?.();
-              }
+              const t = proxy.t;
+              const x = quadBezier(t, startX, ctrlX, target.x);
+              const y = quadBezier(t, startY, ctrlY, target.y);
+              const scale = gsap.utils.interpolate(1, endScale, t);
+              const rotation = gsap.utils.interpolate(0, endRotation, t);
+              const opacity =
+                t < 0.65 ? 1 : gsap.utils.interpolate(1, 0, (t - 0.65) / 0.35);
+
+              gsap.set(layer, {
+                x,
+                y,
+                xPercent: -50,
+                yPercent: -50,
+                scale,
+                rotation,
+                opacity,
+              });
             },
           },
-          "fly",
+          flyAt,
         );
-
-        tl.fromTo(
-          el,
-          {
-            scale: fromScale,
-            opacity: fromOpacity,
-            rotation: fromRotation,
-          },
-          {
-            scale: toScale,
-            opacity: toOpacity,
-            rotation: toRotation,
-            duration,
-            delay,
-            ease: "power1.inOut",
-          },
-          "fly",
-        );
-      };
-
-      if (isGuru) {
-        /** Figma Desktop-63: katmanlar devrilerek sağ üste */
-        const guruFlyRotations = [13, 28, 43, 44, 50, 59, 61, 69];
-        const guruFlyScales = [0.12, 0.1, 0.09, 0.085, 0.08, 0.07, 0.06, 0.05];
-
-        flyAlongArc(
-          main,
-          0,
-          0,
-          flyDuration,
-          1,
-          guruFlyScales[0],
-          1,
-          1,
-          0,
-          guruFlyRotations[0],
-        );
-
-        ghostRefs.current.forEach((ghost, i) => {
-          if (!ghost) return;
-          const lag = 0.06 + i * 0.07;
-          const trailDuration = flyDuration * (0.96 - i * 0.02);
-          const layer = i + 1;
-
-          flyAlongArc(
-            ghost,
-            layer,
-            lag,
-            trailDuration,
-            1,
-            guruFlyScales[layer] ?? 0.05,
-            1,
-            Math.max(0.15, 1 - layer * 0.1),
-            0,
-            guruFlyRotations[layer] ?? 69,
-          );
-        });
-      } else {
-        flyAlongArc(main, 0, 0, flyDuration, 0.78, 0.12, 1, 0, -6, 18);
-
-        ghostRefs.current.forEach((ghost, i) => {
-          if (!ghost) return;
-          const lag = 0.1 + i * 0.09;
-          const trailDuration = flyDuration * (0.94 - i * 0.03);
-
-          flyAlongArc(
-            ghost,
-            0,
-            lag,
-            trailDuration,
-            0.7 - i * 0.06,
-            0.08,
-            0.68 - i * 0.08,
-            0,
-            -2 + i * 4,
-            14 + i * 4,
-          );
-        });
-      }
+      });
     }, root);
 
     return () => {
       ctx.revert();
     };
-  }, [
-    anchorRef,
-    fixedOrigin,
-    points,
-    targetId,
-    variant,
-    isGuru,
-    holdDuration,
-    flyDuration,
-    arcLift,
-    flyTargetLift,
-  ]);
+  }, [anchorRef, fixedOrigin, points, label, targetId, flyTargetLift]);
 
   return (
     <div
       ref={rootRef}
       className="pointer-events-none fixed inset-0 z-50 overflow-visible"
     >
-      {Array.from({ length: ghostCount }).map((_, i) => (
-        <div
-          key={i}
+      {SCORE_STACK_COLORS.map((color, i) => (
+        <span
+          key={color}
           ref={(el) => {
-            ghostRefs.current[i] = el;
+            layerRefs.current[i] = el;
           }}
           className="pointer-events-none absolute left-0 top-0 whitespace-nowrap"
           style={{
             fontFamily: "var(--font-planc), serif",
             fontWeight: 500,
-            fontSize,
+            fontSize: FONT_SIZE,
+            lineHeight: 1,
             WebkitTextStroke: "1.5px #1A1A1A",
+            color,
             opacity: 0,
-            color: isGuru ? GURU_STACK_COLORS[i + 1] : undefined,
+            transformOrigin: "50% 50%",
+            zIndex: i + 1,
           }}
         >
           {text}
-        </div>
+        </span>
       ))}
 
-      <div ref={mainRef} className="absolute left-0 top-0">
-        <div className="relative inline-block leading-none">
-          {label && isGuru && (
-            <div
-              className="pointer-events-none absolute border border-[#1A1A1A]"
-              style={{
-                bottom: "100%",
-                left: "50%",
-                marginBottom: 16,
-                transform: "translateX(-50%) rotate(-20deg)",
-                backgroundColor: "#dfffd1",
-                fontFamily: "var(--font-planc), serif",
-                fontWeight: 600,
-                fontSize: "clamp(32px, 4vw, 56px)",
-                lineHeight: "16px",
-                color: "#1A1A1A",
-                padding: "10px 14px",
-                whiteSpace: "nowrap",
-              }}
-            >
-              {label}
-            </div>
-          )}
-          {isGuru ? (
-            <span
-              className="relative whitespace-nowrap"
-              style={{
-                fontFamily: "var(--font-planc), serif",
-                fontWeight: 500,
-                fontSize,
-                color: GURU_STACK_COLORS[0],
-                WebkitTextStroke: "1.5px #1A1A1A",
-              }}
-            >
-              {text}
-            </span>
-          ) : (
-            <ScoreGlyph points={points} fontSize={fontSize} />
-          )}
+      {label && (
+        <div
+          ref={labelRef}
+          className="pointer-events-none absolute left-0 top-0 border border-[#1A1A1A] bg-[#DFFFD1] whitespace-nowrap"
+          style={{
+            fontFamily: "var(--font-planc), serif",
+            fontWeight: 600,
+            fontSize: LABEL_FONT,
+            lineHeight: 1,
+            color: "#1A1A1A",
+            padding: `${LABEL_PAD_Y}px ${LABEL_PAD_X}px`,
+            zIndex: SCORE_STACK_LAYERS + 2,
+          }}
+        >
+          {label}
         </div>
-        {label && !isGuru && (
-          <div
-            className="pointer-events-none absolute border border-[#1A1A1A]"
-            style={{
-              top: -22,
-              right: -36,
-              backgroundColor: "#B8F04A",
-              fontFamily: "var(--font-planc), serif",
-              fontWeight: 700,
-              fontSize: "12px",
-              color: "#1A1A1A",
-              transform: "rotate(18deg)",
-              padding: "2px 10px",
-            }}
-          >
-            {label}
-          </div>
-        )}
-      </div>
+      )}
     </div>
   );
 }

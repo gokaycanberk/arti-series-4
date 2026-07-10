@@ -7,9 +7,8 @@ import { GameDescBox } from "@/components/GameDescBox";
 import { GameIntroOverlay } from "@/components/GameIntroOverlay";
 import { introPendingPhase, shouldSkipIntroCard } from "@/lib/gameIntro";
 import { useGameIntroPlay } from "@/lib/useGameIntroPlay";
-import ScoreSideReveal, {
-  GURU_STACK_STEP,
-} from "@/components/games/ScoreSideReveal";
+import ScoreSideReveal, { GURU_STACK_STEP } from "@/components/games/ScoreSideReveal";
+import { SCORE_STACK_LAYERS } from "@/components/games/scoreUtils";
 import {
   averageGradientMissPx,
   hasUserMovedGuesses,
@@ -85,7 +84,7 @@ const DONE_RELEASE_HOLD = 0.22;
 const DONE_EXIT_DURATION = 0.28;
 
 /** Guru skor stack görsel merkez düzeltmesi (katmanlar alta doğru) */
-const GURU_SCORE_STACK_LAYERS = 7;
+const GURU_SCORE_STACK_LAYERS = SCORE_STACK_LAYERS;
 
 const DESC_BODY =
   "Place the gradient points where you think they belong and trust your totally scientific understanding of gradients.";

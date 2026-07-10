@@ -120,13 +120,13 @@ export function MarathonResults({
     )
       return;
 
-    /** Halka görselini sürekli yavaş döndür (0°'den başlar). */
+    /** Halka görselini sürekli yavaş döndür — ease yok, duraksama yok. */
     const startRingSpin = (fromAngle = 0) => {
       ringSpinRef.current?.kill();
       gsap.set(badge, { rotation: fromAngle });
       ringSpinRef.current = gsap.to(badge, {
         rotation: fromAngle + 360,
-        duration: 28,
+        duration: 38,
         repeat: -1,
         ease: "none",
       });
@@ -280,12 +280,16 @@ export function MarathonResults({
 
     const badgeSpinStart = INTRO_BADGE_START;
     const badgeGrowDuration = 2.4;
-    const ringSpinStart = badgeSpinStart + badgeGrowDuration;
-    const badgeShrinkStart = ringSpinStart + 3.5;
+    const badgeShrinkStart = badgeSpinStart + badgeGrowDuration + 3.5;
     const stageDropStart = badgeShrinkStart + 0.75;
+    const stageDropDuration = 1.8;
     const boardRevealStart = stageDropStart + 1.1;
-    const stageFinalStart = boardRevealStart + 0.4;
-    const buttonsStart = stageFinalStart + 1.4;
+    const boardRevealDuration = 2.0;
+    // Kart inişi bitsin — aynı anda iki stage.y tween titreme yapıyor
+    const stageFinalStart = stageDropStart + stageDropDuration + 0.05;
+    const stageFinalDuration = 1.6;
+    const buttonsStart = stageFinalStart + stageFinalDuration + 0.35;
+    let finalStageY = INTRO_Y + CARD_DROP;
 
     // 1) Blur — gerçek sağ panel (HEX + skor) net kalır
     tl.to(blur, { opacity: 1, duration: INTRO_BLUR_DURATION }, 0);
@@ -320,33 +324,38 @@ export function MarathonResults({
       INTRO_CARD_IN_START,
     );
 
-    // 4) Halka sıfırdan son boyuta tek seferde smooth büyür
+    // 4) Halka belirir — scale/opacity; dönüş ayrı sürekli tween
     tl.fromTo(
       badge,
-      { scale: 0, opacity: 0, rotation: -73 },
+      { scale: 0, opacity: 0 },
       {
         scale: 1,
         opacity: 1,
-        rotation: 0,
         duration: badgeGrowDuration,
-        ease: "power3.out",
+        ease: "power2.out",
         transformOrigin: "50% 50%",
       },
       badgeSpinStart,
     );
-    tl.add(() => startRingSpin(0), ringSpinStart);
+    tl.add(
+      () => {
+        const rot = Number(gsap.getProperty(badge, "rotation")) || -73;
+        startRingSpin(rot);
+      },
+      badgeSpinStart,
+    );
 
-    // Halka merkeze doğru küçülerek kaybolur
-    tl.add(() => stopRingSpin(), badgeShrinkStart);
+    // Halka merkeze doğru küçülürken dönüş devam eder
     tl.to(
       badge,
       {
         scale: 0,
         opacity: 0,
-        duration: 0.9,
-        ease: "power2.inOut",
+        duration: 1.15,
+        ease: "sine.inOut",
         force3D: true,
         transformOrigin: "50% 50%",
+        onComplete: () => stopRingSpin(),
       },
       badgeShrinkStart,
     );
@@ -354,24 +363,38 @@ export function MarathonResults({
     // Kart aşağı, skorboard yukarı açılır
     tl.to(
       stage,
-      { y: INTRO_Y + CARD_DROP, duration: 1.8, ease: "power2.inOut" },
+      { y: INTRO_Y + CARD_DROP, duration: stageDropDuration, ease: "power2.inOut" },
       stageDropStart,
     );
     tl.to(
       boardClip,
       {
         height: boardFullH,
-        duration: 2.0,
+        duration: boardRevealDuration,
         ease: "power3.out",
+        roundProps: "height",
         onComplete: () => {
           boardClip.style.overflow = "visible";
         },
       },
       boardRevealStart,
     );
+    tl.call(
+      () => {
+        finalStageY = computeFinalY();
+      },
+      [],
+      stageFinalStart,
+    );
     tl.to(
       stage,
-      { y: () => computeFinalY(), duration: 1.6, ease: "power2.out" },
+      {
+        y: function () {
+          return finalStageY;
+        },
+        duration: stageFinalDuration,
+        ease: "power2.inOut",
+      },
       stageFinalStart,
     );
 
